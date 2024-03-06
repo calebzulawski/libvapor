@@ -26,6 +26,13 @@ macro_rules! make_fns {
             pub fn [<vapor_fract_ $ty>](x: $ty) -> $ty {
                 x - [<vapor_trunc_ $ty>](x)
             }
+
+            #[no_mangle]
+            pub fn [<vapor_floor_ $ty>](x: $ty) -> $ty {
+                let trunc = x - [<vapor_trunc_ $ty>](x);
+                let floor = x.simd_lt(Simd::splat(0.0)).select(trunc + Simd::splat(1.0), trunc);
+                x.is_infinite().select(x, floor)
+            }
         }
         )*
     }
