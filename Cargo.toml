@@ -1,0 +1,18 @@
+[package]
+name = "libvapor"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+lib = []
+
+[lib]
+name = "vapor"
+
+[dependencies]
+paste = "1"
+
+[dev-dependencies]
+proptest = "1"
+float_eq = "1"
+num = "0.4"
