@@ -33,6 +33,13 @@ macro_rules! make_fns {
                 let floor = x.simd_lt(Simd::splat(0.0)).select(trunc + Simd::splat(1.0), trunc);
                 x.is_infinite().select(x, floor)
             }
+
+            #[no_mangle]
+            pub fn [<vapor_ceil_ $ty>](x: $ty) -> $ty {
+                let trunc = x - [<vapor_trunc_ $ty>](x);
+                let ceil = x.simd_le(Simd::splat(0.0)).select(trunc, trunc - Simd::splat(1.0));
+                x.is_infinite().select(x, ceil)
+            }
         }
         )*
     }

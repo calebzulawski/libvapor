@@ -50,3 +50,4 @@ macro_rules! unary_test {
 unary_test! { trunc, num::Float::trunc }
 unary_test! { fract, num::Float::fract }
 unary_test! { floor, num::Float::floor }
+unary_test! { ceil, num::Float::ceil }
