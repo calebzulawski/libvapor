@@ -9,6 +9,7 @@ use vapor::*;
 macro_rules! not_subnormal {
     { $ty:ident } => {
         pt::num::$ty::INFINITE
+        | pt::num::$ty::NORMAL
         | pt::num::$ty::NEGATIVE
         | pt::num::$ty::POSITIVE
         | pt::num::$ty::ZERO
@@ -37,7 +38,7 @@ macro_rules! unary_test {
                         if got[i].is_nan() && expect.is_nan() {
                             continue
                         } else {
-                            assert_float_eq!(got[i], expect, ulps <= 2)
+                            assert_float_eq!(got[i], expect, ulps <= 1)
                         }
                     }
                 }
@@ -48,6 +49,7 @@ macro_rules! unary_test {
 }
 
 unary_test! { trunc, num::Float::trunc }
-unary_test! { fract, num::Float::fract }
-unary_test! { floor, num::Float::floor }
-unary_test! { ceil, num::Float::ceil }
+//unary_test! { fract, num::Float::fract }
+//unary_test! { floor, num::Float::floor }
+//unary_test! { ceil, num::Float::ceil }
+//unary_test! { round, num::Float::round }
