@@ -6,18 +6,6 @@ use paste::paste;
 use proptest as pt;
 use vapor::*;
 
-macro_rules! not_subnormal {
-    { $ty:ident } => {
-        pt::num::$ty::INFINITE
-        | pt::num::$ty::NORMAL
-        | pt::num::$ty::NEGATIVE
-        | pt::num::$ty::POSITIVE
-        | pt::num::$ty::ZERO
-        | pt::num::$ty::QUIET_NAN
-        | pt::num::$ty::SIGNALING_NAN
-    }
-}
-
 macro_rules! unary_test {
     { $name:ident, $scalar_fn:expr } => {
         unary_test! { $name, $scalar_fn, f32, 2 }
@@ -31,7 +19,7 @@ macro_rules! unary_test {
         paste! {
             pt::proptest! {
                 #[test]
-                fn [<$name _ $ty x $len>](v in pt::array::[<uniform $len>](not_subnormal!($ty))) {
+                fn [<$name _ $ty x $len>](v in pt::array::[<uniform $len>](pt::num::$ty::ANY)) {
                     let got = [<vapor_ $name _ $ty x $len>](Simd::from_array(v)).to_array();
                     for (i, v) in v.iter().copied().enumerate() {
                         let expect = $scalar_fn(v);
@@ -49,7 +37,7 @@ macro_rules! unary_test {
 }
 
 unary_test! { trunc, num::Float::trunc }
-//unary_test! { fract, num::Float::fract }
-//unary_test! { floor, num::Float::floor }
-//unary_test! { ceil, num::Float::ceil }
-//unary_test! { round, num::Float::round }
+unary_test! { fract, num::Float::fract }
+unary_test! { floor, num::Float::floor }
+unary_test! { ceil, num::Float::ceil }
+unary_test! { round, num::Float::round }
