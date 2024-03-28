@@ -11,6 +11,7 @@ name = "vapor"
 
 [dependencies]
 paste = "1"
+simd-macros = { git = "https://github.com/calebzulawski/simd-macros" }
 
 [dev-dependencies]
 proptest = "1"
