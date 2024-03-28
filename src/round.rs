@@ -129,18 +129,14 @@ macro_rules! make_fns {
                     } else {
                         let x1pm = <$scalar>::from_bits(scalar!(if <$ty>::is_f32() { 0x4b000000u64 } else { 0x4330000000000000u64 } as $unsigned));
                         let y = x.abs() + x1pm - x1pm - x.abs();
-                        let y = if y > 0.5 {
-                            y + x.abs() - 1.0
+                        let direction: $scalar = if y > 0.5 {
+                            -1.0
                         } else if y <= -0.5 {
-                            y + x.abs() + 1.0
+                            1.0
                         } else {
-                            y + x.abs()
+                            0.0
                         };
-                        if x.is_sign_negative() {
-                            -y
-                        } else {
-                            y
-                        }
+                        (y + x.abs() + direction).copysign(x)
                     }
                 })
             }
