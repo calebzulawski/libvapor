@@ -4,6 +4,9 @@
 mod round;
 pub use round::*;
 
+mod sqrt;
+pub use sqrt::*;
+
 #[cfg(feature = "lib")]
 mod panic {
     use core::panic::PanicInfo;
