@@ -7,6 +7,9 @@ pub use round::*;
 mod sqrt;
 pub use sqrt::*;
 
+mod fma;
+pub use fma::*;
+
 #[cfg(feature = "lib")]
 mod panic {
     use core::panic::PanicInfo;
