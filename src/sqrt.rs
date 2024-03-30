@@ -23,16 +23,24 @@ where
     ((a.cast::<u64>() * b.cast::<u64>()) >> 32).cast()
 }
 
+fn mul32_64<const N: usize>(a: Simd<u64, N>, b: Simd<u64, N>) -> Simd<u64, N>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
+    mul32(a.cast(), b.cast()).cast()
+}
+
 /* returns a*b*2^-64 - e, with error 0 <= e < 3.  */
-/*
-fn mul64(a: u64, b: u64) -> u64 {
+fn mul64<const N: usize>(a: Simd<u64, N>, b: Simd<u64, N>) -> Simd<u64, N>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
     let ahi = a >> 32;
-    let alo = a & 0xffffffff;
-    let bhi = a >> 32;
-    let blo = b & 0xffffffff;
+    let alo = a & Simd::splat(0xffffffff);
+    let bhi = b >> 32;
+    let blo = b & Simd::splat(0xffffffff);
     ahi * bhi + (ahi * blo >> 32) + (alo * bhi >> 32)
 }
-*/
 
 macro_rules! make_f32_fns {
     { $($ty:ident, $len:literal)* } => {
@@ -96,8 +104,81 @@ macro_rules! make_f32_fns {
     }
 }
 
+macro_rules! make_f64_fns {
+    { $($ty:ident, $len:literal)* } => {
+        $(
+        paste::paste! {
+            #[no_mangle]
+            pub fn [<vapor_sqrt_ $ty>](x: $ty) -> $ty {
+                vectorize!($len, {
+                    if (x == scalar!(f64::INFINITY)) | (x == 0.0) {
+                        x
+                    } else if x.is_nan() | (x < 0.0) {
+                        scalar!(f64::NAN)
+                    } else {
+                        let subnormal = x.is_subnormal();
+                        let x = if subnormal {
+                            let x1p52 = scalar!(f64::from_bits(0x4330000000000000));
+                            x * x1p52
+                        } else {
+                            x
+                        };
+                        let top = if subnormal {
+                            (x.to_bits() >> 52) - 52
+                        } else {
+                            x.to_bits() >> 52
+                        };
+
+                        let even = (top & 1) != 0;
+                        let m = (x.to_bits() << 11) | 0x8000000000000000;
+                        let m = if even { m >> 1 } else { m };
+                        let top = (top + 0x3ff) >> 1;
+
+                        let three = 0xc0000000;
+                        let i = (x.to_bits() >> 46) % 128;
+                        let mut r = (<u32>::gather_or(&RSQRT_TAB, i as usize, 0) as u64) << 16;
+                        let mut s = mul32_64(m >> 32, r);
+                        let mut d = mul32_64(s, r);
+                        let mut u = three - d;
+                        r = mul32_64(r, u) << 1;
+                        s = mul32_64(s, u) << 1;
+                        d = mul32_64(s, r);
+                        u = three - d;
+                        r = mul32_64(r, u) << 1;
+                        r = r << 32;
+                        s = mul64(m, r);
+                        d = mul64(s, r);
+                        u = (three << 32) - d;
+                        s = mul64(s, u);
+                        s = (s - 2) >> 9;
+
+                        let d0 = (m << 42) - s * s;
+                        let d1 = s - d0;
+                        let d2 = d1 + s + 1;
+                        s += d1 >> 63;
+                        s &= 0x000fffffffffffff;
+                        s |= top << 52;
+                        let y = <f64>::from_bits(s);
+
+                        let mut tiny = if d2 == 0 { 0 } else { 0x0010000000000000 };
+                        tiny |= (d1 ^ d2) & 0x8000000000000000;
+                        y + <f64>::from_bits(tiny)
+                    }
+                })
+            }
+        }
+        )*
+    }
+}
+
 make_f32_fns! {
     f32x2, 2
     f32x4, 4
     f32x8, 8
+}
+
+make_f64_fns! {
+    f64x2, 2
+    f64x4, 4
+    f64x8, 8
 }
