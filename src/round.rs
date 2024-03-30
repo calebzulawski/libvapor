@@ -1,3 +1,9 @@
+/*
+ * Adapted from musl libc
+ * Copyright © 2005-2020 Rich Felker, et al.
+ * SPDX-License-Identifier: MIT
+ */
+
 use core::simd::{prelude::*, LaneCount, SupportedLaneCount};
 use simd_macros::vectorize;
 
