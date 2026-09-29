@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-use core::simd::{prelude::*, LaneCount, SupportedLaneCount};
+use core::simd::prelude::*;
 use simd_macros::vectorize;
 
 macro_rules! make_f32_fns {
@@ -25,7 +25,7 @@ macro_rules! make_f32_fns {
 
                     let halfway = result.to_bits() & 0x1fffffff == 0x10000000;
                     let exact = (result - xy == z) & (result - z == xy);
-                    if (!halfway | result.is_nan() | exact).cast() {
+                    if !halfway | result.is_nan() | exact {
                         result as f32
                     } else {
                         let err = if result.is_sign_negative() == (z > xy) {
@@ -33,7 +33,7 @@ macro_rules! make_f32_fns {
                         } else {
                             z - result + xy
                         };
-                        if (result.is_sign_negative() == (err < 0.0)).cast() {
+                        if result.is_sign_negative() == (err < 0.0) {
                             <f64>::from_bits(result.to_bits() + 1) as f32
                         } else {
                             <f64>::from_bits(result.to_bits() - 1) as f32

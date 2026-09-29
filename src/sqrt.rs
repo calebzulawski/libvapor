@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-use core::simd::{prelude::*, LaneCount, SupportedLaneCount};
+use core::simd::prelude::*;
 use simd_macros::vectorize;
 
 const RSQRT_TAB: [u32; 128] = [
@@ -22,25 +22,16 @@ const RSQRT_TAB: [u32; 128] = [
 ];
 
 /* returns a*b*2^-32 - e, with error 0 <= e < 1.  */
-fn mul32<const N: usize>(a: Simd<u32, N>, b: Simd<u32, N>) -> Simd<u32, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+fn mul32<const N: usize>(a: Simd<u32, N>, b: Simd<u32, N>) -> Simd<u32, N> {
     ((a.cast::<u64>() * b.cast::<u64>()) >> 32).cast()
 }
 
-fn mul32_64<const N: usize>(a: Simd<u64, N>, b: Simd<u64, N>) -> Simd<u64, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+fn mul32_64<const N: usize>(a: Simd<u64, N>, b: Simd<u64, N>) -> Simd<u64, N> {
     mul32(a.cast(), b.cast()).cast()
 }
 
 /* returns a*b*2^-64 - e, with error 0 <= e < 3.  */
-fn mul64<const N: usize>(a: Simd<u64, N>, b: Simd<u64, N>) -> Simd<u64, N>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+fn mul64<const N: usize>(a: Simd<u64, N>, b: Simd<u64, N>) -> Simd<u64, N> {
     let ahi = a >> 32;
     let alo = a & Simd::splat(0xffffffff);
     let bhi = b >> 32;

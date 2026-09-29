@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-use core::simd::{prelude::*, LaneCount, SupportedLaneCount};
+use core::simd::prelude::*;
 use simd_macros::vectorize;
 
 trait Float {
@@ -18,10 +18,7 @@ trait Float {
 
 macro_rules! impl_float {
     { $ty:ty, $int:ty } => {
-        impl<const N: usize> Float for Simd<$ty, N>
-        where
-            LaneCount<N>: SupportedLaneCount,
-        {
+        impl<const N: usize> Float for Simd<$ty, N> {
             type Int = Simd<$int, N>;
 
             fn is_f32() -> bool {
