@@ -10,6 +10,15 @@ pub use sqrt::*;
 mod fma;
 pub use fma::*;
 
+mod exp;
+pub use exp::*;
+
+mod trig;
+pub use trig::*;
+
+mod log;
+pub use log::*;
+
 #[cfg(feature = "lib")]
 mod panic {
     use core::panic::PanicInfo;
