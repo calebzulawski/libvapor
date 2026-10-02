@@ -44,115 +44,119 @@ impl_float! { f32, i32 }
 impl_float! { f64, i64 }
 
 macro_rules! make_fns {
-    { $($ty:ident, $scalar:ty, $len:literal, $unsigned:ty, $signed:ty)* } => {
-        $(
-        paste::paste! {
-            #[no_mangle]
-            pub fn [<vapor_fract_ $ty>](x: $ty) -> $ty {
-                x - [<vapor_trunc_ $ty>](x)
-            }
+    ($scalar:ident, $unsigned:ty, $signed:ty,
+     $fract:ident, $trunc:ident, $floor:ident, $ceil:ident, $round:ident) => {
+        /// Computes the fractional part of each lane.
+        #[inline]
+        pub fn $fract<const N: usize>(x: Simd<$scalar, N>) -> Simd<$scalar, N> {
+            x - $trunc(x)
+        }
 
-            #[no_mangle]
-            pub fn [<vapor_trunc_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    let b = scalar!(if <$ty>::is_f32() { 9 } else { 12 });
-                    let max_exp = scalar!(<$scalar>::MAX_EXP);
-                    let e = x.exponent() - (max_exp as $signed - 1) + b;
-                    if e >= <$scalar>::mantissa_digits() + b {
+        /// Rounds each lane toward zero.
+        #[inline]
+        pub fn $trunc<const N: usize>(x: Simd<$scalar, N>) -> Simd<$scalar, N> {
+            vectorize!(N, {
+                let b = scalar!(if <Simd<$scalar, N>>::is_f32() { 9 } else { 12 });
+                let max_exp = scalar!(<$scalar>::MAX_EXP);
+                let e = x.exponent() - (max_exp as $signed - 1) + b;
+                if e >= <$scalar>::mantissa_digits() + b {
+                    x
+                } else {
+                    let e = if e < b { 1 } else { e };
+                    let m = -1i64 as i64 as $unsigned >> e as $unsigned;
+                    if x.to_bits() & m == 0 {
                         x
                     } else {
-                        let e = if e < b { 1 } else { e };
-                        let m = -1i64 as i64 as $unsigned >> e as $unsigned;
-                        if x.to_bits() & m == 0 {
-                            x
-                        } else {
-                            <$scalar>::from_bits(x.to_bits() & !m)
-                        }
+                        <$scalar>::from_bits(x.to_bits() & !m)
                     }
-                })
-            }
+                }
+            })
+        }
 
-            #[no_mangle]
-            pub fn [<vapor_floor_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    let e = x.exponent() as $signed - scalar!(<$scalar>::MAX_EXP as $signed - 1);
-                    if e >= <$scalar>::mantissa_digits() {
+        /// Rounds each lane toward negative infinity.
+        #[inline]
+        pub fn $floor<const N: usize>(x: Simd<$scalar, N>) -> Simd<$scalar, N> {
+            vectorize!(N, {
+                let e = x.exponent() as $signed - scalar!(<$scalar>::MAX_EXP as $signed - 1);
+                if e >= <$scalar>::mantissa_digits() {
+                    x
+                } else if e >= 0 {
+                    let m = (<$scalar>::mantissa_mask() >> e) as $unsigned;
+                    if x.to_bits() & m == 0 {
                         x
-                    } else if e >= 0{
-                        let m = (<$scalar>::mantissa_mask() >> e) as $unsigned;
-                        if x.to_bits() & m == 0 {
-                            x
-                        } else {
-                            let offset = if x.is_sign_negative() { m } else { 0 };
-                            <$scalar>::from_bits((x.to_bits() + offset) & !m)
-                        }
-                    } else if x.is_sign_positive() {
-                        0.0
-                    } else if x.abs() != 0.0 {
+                    } else {
+                        let offset = if x.is_sign_negative() { m } else { 0 };
+                        <$scalar>::from_bits((x.to_bits() + offset) & !m)
+                    }
+                } else if x.is_sign_positive() {
+                    0.0
+                } else if x.abs() != 0.0 {
+                    -1.0
+                } else {
+                    x
+                }
+            })
+        }
+
+        /// Rounds each lane toward positive infinity.
+        #[inline]
+        pub fn $ceil<const N: usize>(x: Simd<$scalar, N>) -> Simd<$scalar, N> {
+            vectorize!(N, {
+                let e = x.exponent() as $signed - scalar!(<$scalar>::MAX_EXP as $signed - 1);
+                if e >= <$scalar>::mantissa_digits() {
+                    x
+                } else if e >= 0 {
+                    let m = (<$scalar>::mantissa_mask() >> e) as $unsigned;
+                    if x.to_bits() & m == 0 {
+                        x
+                    } else {
+                        let offset = if x.is_sign_positive() { m } else { 0 };
+                        <$scalar>::from_bits((x.to_bits() + offset) & !m)
+                    }
+                } else if x.is_sign_negative() {
+                    -0.0
+                } else if x.abs() != 0.0 {
+                    1.0
+                } else {
+                    x
+                }
+            })
+        }
+
+        /// Rounds each lane to the nearest integer, with halfway cases away from zero.
+        #[inline]
+        pub fn $round<const N: usize>(x: Simd<$scalar, N>) -> Simd<$scalar, N> {
+            vectorize!(N, {
+                let e = x.exponent();
+                let m = scalar!(if <Simd<$scalar, N>>::is_f32() {
+                    0x7f
+                } else {
+                    0x3ff
+                });
+                if e >= m + <$scalar>::mantissa_digits() {
+                    x
+                } else if e < m - 1 {
+                    0.0 * x
+                } else {
+                    let x1pm = <$scalar>::from_bits(scalar!(if <Simd<$scalar, N>>::is_f32() {
+                        0x4b000000u64
+                    } else {
+                        0x4330000000000000u64
+                    } as $unsigned));
+                    let y = x.abs() + x1pm - x1pm - x.abs();
+                    let direction: $scalar = if y > 0.5 {
                         -1.0
-                    } else {
-                        x
-                    }
-                })
-            }
-
-            #[no_mangle]
-            pub fn [<vapor_ceil_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    let e = x.exponent() as $signed - scalar!(<$scalar>::MAX_EXP as $signed - 1);
-                    if e >= <$scalar>::mantissa_digits() {
-                        x
-                    } else if e >= 0 {
-                        let m = (<$scalar>::mantissa_mask() >> e) as $unsigned;
-                        if x.to_bits() & m == 0 {
-                            x
-                        } else {
-                            let offset = if x.is_sign_positive() { m } else { 0 };
-                            <$scalar>::from_bits((x.to_bits() + offset) & !m)
-                        }
-                    } else if x.is_sign_negative() {
-                        -0.0
-                    } else if x.abs() != 0.0 {
+                    } else if y <= -0.5 {
                         1.0
                     } else {
-                        x
-                    }
-                })
-            }
-
-            #[no_mangle]
-            pub fn [<vapor_round_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    let e = x.exponent();
-                    let m = scalar!(if <$ty>::is_f32() { 0x7f } else { 0x3ff });
-                    if e >= m + <$scalar>::mantissa_digits() {
-                        x
-                    } else if e < m - 1 {
-                        0.0 * x
-                    } else {
-                        let x1pm = <$scalar>::from_bits(scalar!(if <$ty>::is_f32() { 0x4b000000u64 } else { 0x4330000000000000u64 } as $unsigned));
-                        let y = x.abs() + x1pm - x1pm - x.abs();
-                        let direction: $scalar = if y > 0.5 {
-                            -1.0
-                        } else if y <= -0.5 {
-                            1.0
-                        } else {
-                            0.0
-                        };
-                        (y + x.abs() + direction).copysign(x)
-                    }
-                })
-            }
+                        0.0
+                    };
+                    (y + x.abs() + direction).copysign(x)
+                }
+            })
         }
-        )*
-    }
+    };
 }
 
-make_fns! {
-    f32x2, f32, 2, u32, i32
-    f32x4, f32, 4, u32, i32
-    f32x8, f32, 8, u32, i32
-    f64x2, f64, 2, u64, i64
-    f64x4, f64, 4, u64, i64
-    f64x8, f64, 8, u64, i64
-}
+make_fns!(f32, u32, i32, fract_f32, trunc_f32, floor_f32, ceil_f32, round_f32);
+make_fns!(f64, u64, i64, fract_f64, trunc_f64, floor_f64, ceil_f64, round_f64);

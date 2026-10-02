@@ -47,7 +47,9 @@ macro_rules! make_helpers {
      $correction:ident, $large:expr, $tiny:expr) => {
         // vectorize! retains scalar if-branch braces in select arguments.
         #[allow(unused_braces)]
-        pub(super) fn $name<const N: usize>(x: Simd<$float, N>) -> Simd<$float, N> {
+        /// Computes atan(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+        #[inline]
+        pub fn $name<const N: usize>(x: Simd<$float, N>) -> Simd<$float, N> {
             vectorize!(N, {
                 let ax = x.abs();
                 let active = x.is_finite() & (ax < scalar!($large));
@@ -133,22 +135,3 @@ make_helpers!(
     f64::from_bits(0x4410000000000000),
     f64::from_bits(0x3e40000000000000)
 );
-
-macro_rules! make_fns {
-    { $($ty:ident, $helper:ident)* } => {
-        $(paste::paste! {
-            /// Computes atan(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_atan_ $ty>](x: $ty) -> $ty { $helper(x) }
-        })*
-    }
-}
-
-make_fns! {
-    f32x2, atan_f32
-    f32x4, atan_f32
-    f32x8, atan_f32
-    f64x2, atan_f64
-    f64x4, atan_f64
-    f64x8, atan_f64
-}

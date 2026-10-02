@@ -16,7 +16,9 @@ macro_rules! make_helpers {
     ($name:ident, $float:ident, $uint:ident, $atan:ident, $word_shift:expr,
      $exponent_gap:expr, $pi:ident, $pi_lo:ident, $pio2:expr, $pio4:expr) => {
         #[allow(unused_braces)]
-        fn $name<const N: usize>(y: Simd<$float, N>, x: Simd<$float, N>) -> Simd<$float, N> {
+        /// Computes atan2(y, x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+        #[inline]
+        pub fn $name<const N: usize>(y: Simd<$float, N>, x: Simd<$float, N>) -> Simd<$float, N> {
             vectorize!(N, {
                 let ax = x.abs();
                 let ay = y.abs();
@@ -98,22 +100,3 @@ make_helpers!(
     PIO2,
     PIO4
 );
-
-macro_rules! make_fns {
-    { $($ty:ident, $helper:ident)* } => {
-        $(paste::paste! {
-            /// Computes atan2(y, x) in radians for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_atan2_ $ty>](y: $ty, x: $ty) -> $ty { $helper(y, x) }
-        })*
-    }
-}
-
-make_fns! {
-    f32x2, atan2_f32
-    f32x4, atan2_f32
-    f32x8, atan2_f32
-    f64x2, atan2_f64
-    f64x4, atan2_f64
-    f64x8, atan2_f64
-}

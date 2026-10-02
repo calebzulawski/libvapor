@@ -3,17 +3,14 @@ name = "libvapor"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-lib = []
-
 [lib]
 name = "vapor"
 
 [dependencies]
-paste = "1"
 simd-macros = { git = "https://github.com/calebzulawski/simd-macros" }
 
 [dev-dependencies]
+paste = "1"
 proptest = "1"
 float_eq = "1"
 num = "0.4"

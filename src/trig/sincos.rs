@@ -86,7 +86,10 @@ fn finish<const N: usize>(
 }
 
 #[allow(unused_braces)]
-fn sincos_f32<const N: usize>(x: Simd<f32, N>) -> (Simd<f32, N>, Simd<f32, N>) {
+/// Computes (sin(x), cos(x)) in radians for each lane with shared argument reduction,
+/// assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn sincos_f32<const N: usize>(x: Simd<f32, N>) -> (Simd<f32, N>, Simd<f32, N>) {
     vectorize!(N, {
         let xd = x as f64;
         let ax = if xd.is_finite() { xd.abs() } else { 0.0 };
@@ -99,7 +102,10 @@ fn sincos_f32<const N: usize>(x: Simd<f32, N>) -> (Simd<f32, N>, Simd<f32, N>) {
 }
 
 #[allow(unused_braces)]
-fn sincos_f64<const N: usize>(x: Simd<f64, N>) -> (Simd<f64, N>, Simd<f64, N>) {
+/// Computes (sin(x), cos(x)) in radians for each lane with shared argument reduction,
+/// assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn sincos_f64<const N: usize>(x: Simd<f64, N>) -> (Simd<f64, N>, Simd<f64, N>) {
     vectorize!(N, {
         let ax = if x.is_finite() { x.abs() } else { 0.0 };
         let reduced = reduce_f64(ax);
@@ -108,30 +114,26 @@ fn sincos_f64<const N: usize>(x: Simd<f64, N>) -> (Simd<f64, N>, Simd<f64, N>) {
     })
 }
 
-macro_rules! make_fns {
-    { $($ty:ident, $helper:ident)* } => {
-        $(paste::paste! {
-            /// Computes sin(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_sin_ $ty>](x: $ty) -> $ty { $helper(x).0 }
-
-            /// Computes cos(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_cos_ $ty>](x: $ty) -> $ty { $helper(x).1 }
-
-            /// Computes (sin(x), cos(x)) in radians for each lane with shared argument reduction,
-            /// assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_sincos_ $ty>](x: $ty) -> ($ty, $ty) { $helper(x) }
-        })*
-    }
+/// Computes sin(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn sin_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    sincos_f32(x).0
 }
 
-make_fns! {
-    f32x2, sincos_f32
-    f32x4, sincos_f32
-    f32x8, sincos_f32
-    f64x2, sincos_f64
-    f64x4, sincos_f64
-    f64x8, sincos_f64
+/// Computes cos(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn cos_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    sincos_f32(x).1
+}
+
+/// Computes sin(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn sin_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    sincos_f64(x).0
+}
+
+/// Computes cos(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn cos_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    sincos_f64(x).1
 }

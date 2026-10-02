@@ -13,7 +13,9 @@ use super::reduction::{
     finish_f32, finish_f64, normalize_f32, normalize_f64, table_f32, table_f64,
 };
 
-fn log_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+/// Computes the natural logarithm of each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn log_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
     let bits = normalize_f32(x);
     let (index, k, z) = table_f32(bits);
     let y = vectorize!(N, {
@@ -57,7 +59,9 @@ fn near_one<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     })
 }
 
-fn log_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+/// Computes the natural logarithm of each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn log_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     let near = x.simd_ge(Simd::splat(NEAR_LO)) & x.simd_lt(Simd::splat(NEAR_HI));
     if near.all() {
         return finish_f64(x, near_one(x));
@@ -87,23 +91,4 @@ fn log_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
         y = near.select(near_one(a), y);
     }
     finish_f64(x, y)
-}
-
-macro_rules! make_fns {
-    { $($ty:ident, $helper:ident)* } => {
-        $(paste::paste! {
-            /// Computes the natural logarithm of each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_log_ $ty>](x: $ty) -> $ty { $helper(x) }
-        })*
-    }
-}
-
-make_fns! {
-    f32x2, log_f32
-    f32x4, log_f32
-    f32x8, log_f32
-    f64x2, log_f64
-    f64x4, log_f64
-    f64x8, log_f64
 }

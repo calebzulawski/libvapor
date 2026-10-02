@@ -39,143 +39,122 @@ fn mul64<const N: usize>(a: Simd<u64, N>, b: Simd<u64, N>) -> Simd<u64, N> {
     ahi * bhi + (ahi * blo >> 32) + (alo * bhi >> 32)
 }
 
-macro_rules! make_f32_fns {
-    { $($ty:ident, $len:literal)* } => {
-        $(
-        paste::paste! {
-            #[no_mangle]
-            pub fn [<vapor_sqrt_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    if (x == scalar!(f32::INFINITY)) | (x == 0.0) {
-                        x
-                    } else if x.is_nan() | (x < 0.0) {
-                        scalar!(f32::NAN)
-                    } else {
-                        let x1p23 = scalar!(f32::from_bits(0x4b000000));
-                        let x = if x.is_subnormal() {
-                            <f32>::from_bits((x * x1p23).to_bits() - (23u32 << 23))
-                        } else {
-                            x
-                        };
+/// Computes the square root of each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn sqrt_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    vectorize!(N, {
+        if (x == scalar!(f32::INFINITY)) | (x == 0.0) {
+            x
+        } else if x.is_nan() | (x < 0.0) {
+            scalar!(f32::NAN)
+        } else {
+            let x1p23 = scalar!(f32::from_bits(0x4b000000));
+            let x = if x.is_subnormal() {
+                <f32>::from_bits((x * x1p23).to_bits() - (23u32 << 23))
+            } else {
+                x
+            };
 
-                        let even = x.to_bits() & 0x00800000 != 0;
-                        let m = if even {
-                            (x.to_bits() << 7) & 0x7fffffff
-                        } else {
-                            (x.to_bits() << 8) | 0x80000000
-                        };
+            let even = x.to_bits() & 0x00800000 != 0;
+            let m = if even {
+                (x.to_bits() << 7) & 0x7fffffff
+            } else {
+                (x.to_bits() << 8) | 0x80000000
+            };
 
-                        let mut ey = x.to_bits() >> 1;
-                        ey += 0x3f800000u32 >> 1;
-                        ey &= 0x7f800000;
+            let mut ey = x.to_bits() >> 1;
+            ey += 0x3f800000u32 >> 1;
+            ey &= 0x7f800000;
 
-                        let three = 0xc0000000;
-                        let i = (x.to_bits() >> 17) % 128;
-                        let mut r = <u32>::gather_or(&RSQRT_TAB, i as usize, 0) << 16;
-                        let mut s = mul32(m, r);
-                        let mut d = mul32(s, r);
-                        let mut u = three - d;
-                        r = mul32(r, u) << 1;
-                        s = mul32(s, u) << 1;
-                        d = mul32(s, r);
-                        u = three - d;
-                        s = mul32(s, u);
-                        s = (s - 1) >> 6;
+            let three = 0xc0000000;
+            let i = (x.to_bits() >> 17) % 128;
+            let mut r = <u32>::gather_or(&RSQRT_TAB, i as usize, 0) << 16;
+            let mut s = mul32(m, r);
+            let mut d = mul32(s, r);
+            let mut u = three - d;
+            r = mul32(r, u) << 1;
+            s = mul32(s, u) << 1;
+            d = mul32(s, r);
+            u = three - d;
+            s = mul32(s, u);
+            s = (s - 1) >> 6;
 
-                        let d0 = (m << 16) - s * s;
-                        let d1 = s - d0;
-                        let d2 = d1 + s + 1;
-                        s += d1 >> 31;
-                        s &= 0x007fffff;
-                        s |= ey;
-                        let y = <f32>::from_bits(s);
+            let d0 = (m << 16) - s * s;
+            let d1 = s - d0;
+            let d2 = d1 + s + 1;
+            s += d1 >> 31;
+            s &= 0x007fffff;
+            s |= ey;
+            let y = <f32>::from_bits(s);
 
-                        let mut tiny = if d2 == 0 { 0 } else { 0x01000000 };
-                        tiny |= (d1 ^ d2) & 0x80000000;
-                        y + <f32>::from_bits(tiny)
-                    }
-                })
-            }
+            let mut tiny = if d2 == 0 { 0 } else { 0x01000000 };
+            tiny |= (d1 ^ d2) & 0x80000000;
+            y + <f32>::from_bits(tiny)
         }
-        )*
-    }
+    })
 }
 
-macro_rules! make_f64_fns {
-    { $($ty:ident, $len:literal)* } => {
-        $(
-        paste::paste! {
-            #[no_mangle]
-            pub fn [<vapor_sqrt_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    if (x == scalar!(f64::INFINITY)) | (x == 0.0) {
-                        x
-                    } else if x.is_nan() | (x < 0.0) {
-                        scalar!(f64::NAN)
-                    } else {
-                        let subnormal = x.is_subnormal();
-                        let x = if subnormal {
-                            let x1p52 = scalar!(f64::from_bits(0x4330000000000000));
-                            x * x1p52
-                        } else {
-                            x
-                        };
-                        let top = if subnormal {
-                            (x.to_bits() >> 52) - 52
-                        } else {
-                            x.to_bits() >> 52
-                        };
+/// Computes the square root of each lane, assuming round-to-nearest, ties-to-even.
+#[allow(
+    unused_braces,
+    unused_parens,
+    reason = "vectorize! retains scalar branch braces and grouping"
+)]
+#[inline]
+pub fn sqrt_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    vectorize!(N, {
+        if (x == scalar!(f64::INFINITY)) | (x == 0.0) {
+            x
+        } else if x.is_nan() | (x < 0.0) {
+            scalar!(f64::NAN)
+        } else {
+            let subnormal = x.is_subnormal();
+            let x = if subnormal {
+                let x1p52 = scalar!(f64::from_bits(0x4330000000000000));
+                x * x1p52
+            } else {
+                x
+            };
+            let top = if subnormal {
+                (x.to_bits() >> 52) - 52
+            } else {
+                x.to_bits() >> 52
+            };
 
-                        let even = (top & 1) != 0;
-                        let m = (x.to_bits() << 11) | 0x8000000000000000;
-                        let m = if even { m >> 1 } else { m };
-                        let top = (top + 0x3ff) >> 1;
+            let even = (top & 1) != 0;
+            let m = (x.to_bits() << 11) | 0x8000000000000000;
+            let m = if even { m >> 1 } else { m };
+            let top = (top + 0x3ff) >> 1;
 
-                        let three = 0xc0000000;
-                        let i = (x.to_bits() >> 46) % 128;
-                        let mut r = (<u32>::gather_or(&RSQRT_TAB, i as usize, 0) as u64) << 16;
-                        let mut s = mul32_64(m >> 32, r);
-                        let mut d = mul32_64(s, r);
-                        let mut u = three - d;
-                        r = mul32_64(r, u) << 1;
-                        s = mul32_64(s, u) << 1;
-                        d = mul32_64(s, r);
-                        u = three - d;
-                        r = mul32_64(r, u) << 1;
-                        r = r << 32;
-                        s = mul64(m, r);
-                        d = mul64(s, r);
-                        u = (three << 32) - d;
-                        s = mul64(s, u);
-                        s = (s - 2) >> 9;
+            let three = 0xc0000000;
+            let i = (x.to_bits() >> 46) % 128;
+            let mut r = (<u32>::gather_or(&RSQRT_TAB, i as usize, 0) as u64) << 16;
+            let mut s = mul32_64(m >> 32, r);
+            let mut d = mul32_64(s, r);
+            let mut u = three - d;
+            r = mul32_64(r, u) << 1;
+            s = mul32_64(s, u) << 1;
+            d = mul32_64(s, r);
+            u = three - d;
+            r = mul32_64(r, u) << 1;
+            r = r << 32;
+            s = mul64(m, r);
+            d = mul64(s, r);
+            u = (three << 32) - d;
+            s = mul64(s, u);
+            s = (s - 2) >> 9;
 
-                        let d0 = (m << 42) - s * s;
-                        let d1 = s - d0;
-                        let d2 = d1 + s + 1;
-                        s += d1 >> 63;
-                        s &= 0x000fffffffffffff;
-                        s |= top << 52;
-                        let y = <f64>::from_bits(s);
+            let d0 = (m << 42) - s * s;
+            let d1 = s - d0;
+            let d2 = d1 + s + 1;
+            s += d1 >> 63;
+            s &= 0x000fffffffffffff;
+            s |= top << 52;
+            let y = <f64>::from_bits(s);
 
-                        let mut tiny = if d2 == 0 { 0 } else { 0x0010000000000000 };
-                        tiny |= (d1 ^ d2) & 0x8000000000000000;
-                        y + <f64>::from_bits(tiny)
-                    }
-                })
-            }
+            let mut tiny = if d2 == 0 { 0 } else { 0x0010000000000000 };
+            tiny |= (d1 ^ d2) & 0x8000000000000000;
+            y + <f64>::from_bits(tiny)
         }
-        )*
-    }
-}
-
-make_f32_fns! {
-    f32x2, 2
-    f32x4, 4
-    f32x8, 8
-}
-
-make_f64_fns! {
-    f64x2, 2
-    f64x4, 4
-    f64x8, 8
+    })
 }

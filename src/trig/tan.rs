@@ -111,7 +111,9 @@ fn tan_kernel_f64<const N: usize>(
 }
 
 #[allow(unused_braces)]
-fn tan_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+/// Computes tan(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn tan_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
     vectorize!(N, {
         let xd = x as f64;
         let finite = xd.is_finite();
@@ -127,7 +129,9 @@ fn tan_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
 }
 
 #[allow(unused_braces)]
-fn tan_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+/// Computes tan(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn tan_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     vectorize!(N, {
         let finite = x.is_finite();
         let ax = if finite { x.abs() } else { 0.0 };
@@ -141,23 +145,4 @@ fn tan_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
             x - x
         }
     })
-}
-
-macro_rules! make_fns {
-    { $($ty:ident, $helper:ident)* } => {
-        $(paste::paste! {
-            /// Computes tan(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_tan_ $ty>](x: $ty) -> $ty { $helper(x) }
-        })*
-    }
-}
-
-make_fns! {
-    f32x2, tan_f32
-    f32x4, tan_f32
-    f32x8, tan_f32
-    f64x2, tan_f64
-    f64x4, tan_f64
-    f64x8, tan_f64
 }

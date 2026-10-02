@@ -17,7 +17,9 @@ macro_rules! make_helpers {
     ($name:ident, $float:ident, $interval:ident, $series:ident,
      $ln2_hi:ident, $ln2_lo:ident, $direct_lo:expr, $direct_hi:expr, $tiny:expr, $correction_limit:expr) => {
         #[allow(unused_braces)]
-        fn $name<const N: usize>(x: Simd<$float, N>) -> Simd<$float, N> {
+        /// Computes log(1+x) accurately near zero for each lane, assuming round-to-nearest, ties-to-even.
+        #[inline]
+        pub fn $name<const N: usize>(x: Simd<$float, N>) -> Simd<$float, N> {
             vectorize!(N, {
                 let valid = x.is_finite() & (x > -1.0);
                 let a = if valid { x } else { 0.0 };
@@ -83,22 +85,3 @@ make_helpers!(
     f64::from_bits(0x3ca0000000000000),
     54.0
 );
-
-macro_rules! make_fns {
-    { $($ty:ident, $helper:ident)* } => {
-        $(paste::paste! {
-            /// Computes log(1+x) accurately near zero for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_log1p_ $ty>](x: $ty) -> $ty { $helper(x) }
-        })*
-    }
-}
-
-make_fns! {
-    f32x2, log1p_f32
-    f32x4, log1p_f32
-    f32x8, log1p_f32
-    f64x2, log1p_f64
-    f64x4, log1p_f64
-    f64x8, log1p_f64
-}

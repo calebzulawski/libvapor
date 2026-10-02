@@ -11,6 +11,7 @@ use core::simd::prelude::*;
 use simd_macros::vectorize;
 
 use super::data::*;
+use crate::{sqrt_f32, sqrt_f64};
 
 fn rational_f32<const N: usize>(z: Simd<f32, N>) -> Simd<f32, N> {
     vectorize!(N, {
@@ -66,10 +67,9 @@ fn split_root_f64<const N: usize>(
 }
 
 #[allow(unused_braces)]
-fn asin_f32<const N: usize>(
-    x: Simd<f32, N>,
-    sqrt: impl Fn(Simd<f64, N>) -> Simd<f64, N>,
-) -> Simd<f32, N> {
+/// Computes asin(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn asin_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
     let (a, valid, upper, z, r, mut result) = vectorize!(N, {
         let ax = x.abs();
         let valid = ax <= 1.0;
@@ -81,7 +81,7 @@ fn asin_f32<const N: usize>(
     });
     if upper.any() {
         // musl's float asin uses a double square root in this interval.
-        let s = sqrt(upper.select(z, Simd::splat(1.0)).cast());
+        let s = sqrt_f64(upper.select(z, Simd::splat(1.0)).cast());
         let reduced = vectorize!(N, {
             let result = scalar!(PIO2) - 2.0 * (s + s * r as f64);
             result as f32
@@ -105,10 +105,9 @@ fn asin_f32<const N: usize>(
 }
 
 #[allow(unused_braces)]
-fn asin_f64<const N: usize>(
-    x: Simd<f64, N>,
-    sqrt: impl Fn(Simd<f64, N>) -> Simd<f64, N>,
-) -> Simd<f64, N> {
+/// Computes asin(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn asin_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     let (a, valid, upper, z, r, mut result) = vectorize!(N, {
         let ax = x.abs();
         let valid = ax <= 1.0;
@@ -119,7 +118,7 @@ fn asin_f64<const N: usize>(
         (a, valid, upper, z, r, a + a * r)
     });
     if upper.any() {
-        let s = sqrt(upper.select(z, Simd::splat(1.0)));
+        let s = sqrt_f64(upper.select(z, Simd::splat(1.0)));
         let (f, c) = split_root_f64(z, s);
         let reduced = vectorize!(N, {
             let near_one = a >= scalar!(f64::from_bits(0x3fef333300000000));
@@ -149,10 +148,9 @@ fn asin_f64<const N: usize>(
 }
 
 #[allow(unused_braces)]
-fn acos_f32<const N: usize>(
-    x: Simd<f32, N>,
-    sqrt: impl Fn(Simd<f32, N>) -> Simd<f32, N>,
-) -> Simd<f32, N> {
+/// Computes acos(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn acos_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
     let (valid, upper, z, r, mut result) = vectorize!(N, {
         let valid = x.abs() <= 1.0;
         let a = if valid { x } else { 0.0 };
@@ -163,7 +161,7 @@ fn acos_f32<const N: usize>(
         (valid, upper, z, r, result)
     });
     if upper.any() {
-        let s = sqrt(upper.select(z, Simd::splat(1.0)));
+        let s = sqrt_f32(upper.select(z, Simd::splat(1.0)));
         let (f, c) = split_root_f32(z, s);
         let reduced = vectorize!(N, {
             if x.is_sign_negative() {
@@ -188,10 +186,9 @@ fn acos_f32<const N: usize>(
 }
 
 #[allow(unused_braces)]
-fn acos_f64<const N: usize>(
-    x: Simd<f64, N>,
-    sqrt: impl Fn(Simd<f64, N>) -> Simd<f64, N>,
-) -> Simd<f64, N> {
+/// Computes acos(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn acos_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     let (valid, upper, z, r, mut result) = vectorize!(N, {
         let valid = x.abs() <= 1.0;
         let a = if valid { x } else { 0.0 };
@@ -202,7 +199,7 @@ fn acos_f64<const N: usize>(
         (valid, upper, z, r, result)
     });
     if upper.any() {
-        let s = sqrt(upper.select(z, Simd::splat(1.0)));
+        let s = sqrt_f64(upper.select(z, Simd::splat(1.0)));
         let (f, c) = split_root_f64(z, s);
         let reduced = vectorize!(N, {
             if x.is_sign_negative() {
@@ -222,31 +219,4 @@ fn acos_f64<const N: usize>(
             scalar!(f64::NAN)
         }
     })
-}
-
-macro_rules! make_fns {
-    { $($ty:ident, $len:literal, $asin:ident, $acos:ident)* } => {
-        $(paste::paste! {
-            /// Computes asin(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_asin_ $ty>](x: $ty) -> $ty {
-                $asin(x, crate::[<vapor_sqrt_f64x $len>])
-            }
-
-            /// Computes acos(x) in radians for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_acos_ $ty>](x: $ty) -> $ty {
-                $acos(x, crate::[<vapor_sqrt_ $ty>])
-            }
-        })*
-    }
-}
-
-make_fns! {
-    f32x2, 2, asin_f32, acos_f32
-    f32x4, 4, asin_f32, acos_f32
-    f32x8, 8, asin_f32, acos_f32
-    f64x2, 2, asin_f64, acos_f64
-    f64x4, 4, asin_f64, acos_f64
-    f64x8, 8, asin_f64, acos_f64
 }

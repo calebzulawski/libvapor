@@ -1,2 +1,0 @@
-[alias]
-make-libraries = "rustc --crate-type staticlib --crate-type cdylib  --release --features lib --config .cargo/lib.toml"

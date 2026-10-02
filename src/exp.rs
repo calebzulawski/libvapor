@@ -107,154 +107,144 @@ fn exp_poly_f64<const N: usize>(
     })
 }
 
-macro_rules! make_f32_fns {
-    { $($ty:ident, $len:literal)* } => {
-        $(
-        paste::paste! {
-            /// Computes 2^x for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_exp2_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    let overflow = x >= 128.0;
-                    let underflow = x <= -150.0;
-                    let nan = x.is_nan();
+/// Computes 2^x for each lane, assuming round-to-nearest, ties-to-even.
+#[allow(
+    unused_braces,
+    unused_parens,
+    reason = "vectorize! retains scalar branch braces and grouping"
+)]
+#[inline]
+pub fn exp2_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    vectorize!(N, {
+        let overflow = x >= 128.0;
+        let underflow = x <= -150.0;
+        let nan = x.is_nan();
 
-                    // Selects evaluate both branches. Keep exceptional lanes out
-                    // of the reduction and restore their results afterward.
-                    let xd = (if overflow | underflow | nan { 0.0 } else { x }) as f64;
-                    let kd = xd + scalar!(EXP2_SHIFT_F32);
-                    let ki = kd.to_bits();
-                    let kd = kd - scalar!(EXP2_SHIFT_F32);
-                    let r = xd - kd;
-                    let y = exp_poly(ki, r, verbatim!(EXP2_POLY_F32));
+        // Selects evaluate both branches. Keep exceptional lanes out
+        // of the reduction and restore their results afterward.
+        let xd = (if overflow | underflow | nan { 0.0 } else { x }) as f64;
+        let kd = xd + scalar!(EXP2_SHIFT_F32);
+        let ki = kd.to_bits();
+        let kd = kd - scalar!(EXP2_SHIFT_F32);
+        let r = xd - kd;
+        let y = exp_poly(ki, r, verbatim!(EXP2_POLY_F32));
 
-                    if nan {
-                        x + x
-                    } else if overflow {
-                        scalar!(f32::INFINITY)
-                    } else if underflow {
-                        0.0
-                    } else {
-                        y
-                    }
-                })
-            }
-
-            /// Computes e^x for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_exp_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    let overflow = x > scalar!(f32::from_bits(0x42b17217));
-                    let underflow = x < scalar!(f32::from_bits(0xc2cff1b4));
-                    let nan = x.is_nan();
-                    let xd = (if overflow | underflow | nan { 0.0 } else { x }) as f64;
-
-                    // x*32/ln(2) = k + r, with |r| <= 1/2.
-                    let z = scalar!(INV_LN2_SCALED_F32) * xd;
-                    let kd = z + scalar!(SHIFT);
-                    let ki = kd.to_bits();
-                    let kd = kd - scalar!(SHIFT);
-                    let r = z - kd;
-                    let y = exp_poly(ki, r, verbatim!(EXP_POLY_F32));
-
-                    if nan {
-                        x + x
-                    } else if overflow {
-                        scalar!(f32::INFINITY)
-                    } else if underflow {
-                        0.0
-                    } else {
-                        y
-                    }
-                })
-            }
+        if nan {
+            x + x
+        } else if overflow {
+            scalar!(f32::INFINITY)
+        } else if underflow {
+            0.0
+        } else {
+            y
         }
-        )*
-    }
+    })
 }
 
-make_f32_fns! {
-    f32x2, 2
-    f32x4, 4
-    f32x8, 8
-}
+/// Computes e^x for each lane, assuming round-to-nearest, ties-to-even.
+#[allow(
+    unused_braces,
+    unused_parens,
+    reason = "vectorize! retains scalar branch braces and grouping"
+)]
+#[inline]
+pub fn exp_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    vectorize!(N, {
+        let overflow = x > scalar!(f32::from_bits(0x42b17217));
+        let underflow = x < scalar!(f32::from_bits(0xc2cff1b4));
+        let nan = x.is_nan();
+        let xd = (if overflow | underflow | nan { 0.0 } else { x }) as f64;
 
-macro_rules! make_f64_fns {
-    { $($ty:ident, $len:literal)* } => {
-        $(
-        paste::paste! {
-            /// Computes 2^x for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_exp2_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    let overflow = x >= 1024.0;
-                    let underflow = x <= -1075.0;
-                    let nan = x.is_nan();
-                    let tiny = x.abs() < scalar!(f64::from_bits(0x3c90000000000000));
-                    let xd = if overflow | underflow | nan | tiny { 0.0 } else { x };
+        // x*32/ln(2) = k + r, with |r| <= 1/2.
+        let z = scalar!(INV_LN2_SCALED_F32) * xd;
+        let kd = z + scalar!(SHIFT);
+        let ki = kd.to_bits();
+        let kd = kd - scalar!(SHIFT);
+        let r = z - kd;
+        let y = exp_poly(ki, r, verbatim!(EXP_POLY_F32));
 
-                    // x = k/128 + r, with |r| <= 1/256.
-                    let kd = xd + scalar!(EXP2_SHIFT_F64);
-                    let ki = kd.to_bits();
-                    let kd = kd - scalar!(EXP2_SHIFT_F64);
-                    let r = xd - kd;
-                    let large = xd.abs() > 928.0;
-                    let y = exp_poly_f64(ki, r, verbatim!(EXP2_POLY_F64), large, verbatim!(1));
-
-                    if nan {
-                        x + x
-                    } else if overflow {
-                        scalar!(f64::INFINITY)
-                    } else if underflow {
-                        0.0
-                    } else if tiny {
-                        1.0 + x
-                    } else {
-                        y
-                    }
-                })
-            }
-
-            /// Computes e^x for each lane, assuming round-to-nearest, ties-to-even.
-            #[no_mangle]
-            pub fn [<vapor_exp_ $ty>](x: $ty) -> $ty {
-                vectorize!($len, {
-                    // Other overflow and underflow cases are handled by scaling.
-                    let overflow = x >= 1024.0;
-                    let underflow = x <= -1024.0;
-                    let nan = x.is_nan();
-                    let tiny = x.abs() < scalar!(f64::from_bits(0x3c90000000000000));
-                    let xd = if overflow | underflow | nan | tiny { 0.0 } else { x };
-
-                    let z = scalar!(INV_LN2_SCALED_F64) * xd;
-                    let kd = z + scalar!(SHIFT);
-                    let ki = kd.to_bits();
-                    let kd = kd - scalar!(SHIFT);
-                    // Split ln(2)/128 to preserve precision in the remainder.
-                    let r = xd + kd * scalar!(NEG_LN2_HI_F64) + kd * scalar!(NEG_LN2_LO_F64);
-                    let large = xd.abs() >= 512.0;
-                    let y = exp_poly_f64(ki, r, verbatim!(EXP_POLY_F64), large, verbatim!(1009));
-
-                    if nan {
-                        x + x
-                    } else if overflow {
-                        scalar!(f64::INFINITY)
-                    } else if underflow {
-                        0.0
-                    } else if tiny {
-                        1.0 + x
-                    } else {
-                        y
-                    }
-                })
-            }
+        if nan {
+            x + x
+        } else if overflow {
+            scalar!(f32::INFINITY)
+        } else if underflow {
+            0.0
+        } else {
+            y
         }
-        )*
-    }
+    })
 }
 
-make_f64_fns! {
-    f64x2, 2
-    f64x4, 4
-    f64x8, 8
+/// Computes 2^x for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn exp2_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    vectorize!(N, {
+        let overflow = x >= 1024.0;
+        let underflow = x <= -1075.0;
+        let nan = x.is_nan();
+        let tiny = x.abs() < scalar!(f64::from_bits(0x3c90000000000000));
+        let xd = if overflow | underflow | nan | tiny {
+            0.0
+        } else {
+            x
+        };
+
+        // x = k/128 + r, with |r| <= 1/256.
+        let kd = xd + scalar!(EXP2_SHIFT_F64);
+        let ki = kd.to_bits();
+        let kd = kd - scalar!(EXP2_SHIFT_F64);
+        let r = xd - kd;
+        let large = xd.abs() > 928.0;
+        let y = exp_poly_f64(ki, r, verbatim!(EXP2_POLY_F64), large, verbatim!(1));
+
+        if nan {
+            x + x
+        } else if overflow {
+            scalar!(f64::INFINITY)
+        } else if underflow {
+            0.0
+        } else if tiny {
+            1.0 + x
+        } else {
+            y
+        }
+    })
+}
+
+/// Computes e^x for each lane, assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn exp_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    vectorize!(N, {
+        // Other overflow and underflow cases are handled by scaling.
+        let overflow = x >= 1024.0;
+        let underflow = x <= -1024.0;
+        let nan = x.is_nan();
+        let tiny = x.abs() < scalar!(f64::from_bits(0x3c90000000000000));
+        let xd = if overflow | underflow | nan | tiny {
+            0.0
+        } else {
+            x
+        };
+
+        let z = scalar!(INV_LN2_SCALED_F64) * xd;
+        let kd = z + scalar!(SHIFT);
+        let ki = kd.to_bits();
+        let kd = kd - scalar!(SHIFT);
+        // Split ln(2)/128 to preserve precision in the remainder.
+        let r = xd + kd * scalar!(NEG_LN2_HI_F64) + kd * scalar!(NEG_LN2_LO_F64);
+        let large = xd.abs() >= 512.0;
+        let y = exp_poly_f64(ki, r, verbatim!(EXP_POLY_F64), large, verbatim!(1009));
+
+        if nan {
+            x + x
+        } else if overflow {
+            scalar!(f64::INFINITY)
+        } else if underflow {
+            0.0
+        } else if tiny {
+            1.0 + x
+        } else {
+            y
+        }
+    })
 }
