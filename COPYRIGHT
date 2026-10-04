@@ -1,0 +1,78 @@
+Copyright 2024-2026 Caleb Zulawski
+SPDX-License-Identifier: MIT
+
+License texts are in LICENSES/.
+
+----------------------------------------------------------------------
+
+musl
+Software rounding and square root, and musl changes to imported math code.
+
+Copyright © 2005-2020 Rich Felker, et al.
+Copyright © 2005-2014 Rich Felker, et al.
+SPDX-License-Identifier: MIT
+
+----------------------------------------------------------------------
+
+Arm optimized-routines
+FMA exponential, logarithm, trigonometric and inverse trigonometric
+implementations, with non-FMA adaptations. Exponential tables and
+single-precision argument reduction. Full-range exponentials and some
+tables came through musl.
+
+Copyright (c) 1999-2022, Arm Limited.
+Copyright (c) 2017-2018, Arm Limited.
+Copyright (c) 2018, Arm Limited.
+Copyright (c) 2018-2019, Arm Limited.
+Copyright (c) 2018-2024, Arm Limited.
+Copyright (c) 2019-2022, Arm Limited.
+Copyright (c) 2019-2024, Arm Limited.
+Copyright (c) 2019-2025, Arm Limited.
+Copyright (c) 2019-2026, Arm Limited.
+Copyright (c) 2020-2025, Arm Limited.
+Copyright (c) 2021-2025, Arm Limited.
+Copyright (c) 2022-2024, Arm Limited.
+Copyright (c) 2022-2025, Arm Limited.
+Copyright (c) 2023-2024, Arm Limited.
+Copyright (c) 2023-2025, Arm Limited.
+Copyright © 2005-2020 Rich Felker, et al.
+SPDX-License-Identifier: MIT
+
+----------------------------------------------------------------------
+
+Sun Microsystems (via musl)
+Non-FMA logarithms, full-range sine and cosine, and trigonometric argument
+reduction and tables.
+
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+Copyright © 2005-2020 Rich Felker, et al.
+Copyright © 2005-2014 Rich Felker, et al.
+SPDX-License-Identifier: MIT AND SunPro
+
+----------------------------------------------------------------------
+
+Sun Microsystems (via musl)
+Non-FMA tangent kernels and coefficients.
+
+Copyright 2004 Sun Microsystems, Inc.  All Rights Reserved.
+Copyright © 2005-2020 Rich Felker, et al.
+SPDX-License-Identifier: MIT AND LicenseRef-SunPro-short
+
+----------------------------------------------------------------------
+
+David Schultz (via musl)
+Software single-precision fused multiply-add.
+
+Copyright (c) 2005-2011 David Schultz <das@FreeBSD.ORG>
+All rights reserved.
+Copyright © 2005-2020 Rich Felker, et al.
+SPDX-License-Identifier: MIT AND BSD-2-Clause
+
+----------------------------------------------------------------------
+
+SLEEF
+Polynomials for non-FMA exp, exp2, sin and cos, and split ln(2) and pi
+constants used in non-FMA argument reduction.
+
+Copyright Naoki Shibata and contributors 2010 - 2025.
+SPDX-License-Identifier: MIT AND BSL-1.0

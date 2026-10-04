@@ -1,0 +1,111 @@
+//! MPFR references for transcendental tests.
+
+use crate::{Case, Width};
+use rug::{float::Round, Float};
+
+pub const PRECISION: u32 = 768;
+
+fn reference(op: &str, width: Width, input: [u64; 3], rounding: Round) -> Float {
+    let [mut x, y, _] = input.map(|bits| Float::with_val(PRECISION, width.value(bits)));
+    match op {
+        "exp" => {
+            x.exp_round(rounding);
+        }
+        "exp2" => {
+            x.exp2_round(rounding);
+        }
+        "log" => {
+            x.ln_round(rounding);
+        }
+        "log2" => {
+            x.log2_round(rounding);
+        }
+        "log10" => {
+            x.log10_round(rounding);
+        }
+        "log1p" => {
+            x.ln_1p_round(rounding);
+        }
+        "sin" => {
+            x.sin_round(rounding);
+        }
+        "cos" => {
+            x.cos_round(rounding);
+        }
+        "tan" => {
+            x.tan_round(rounding);
+        }
+        "atan" => {
+            x.atan_round(rounding);
+        }
+        "asin" => {
+            x.asin_round(rounding);
+        }
+        "acos" => {
+            x.acos_round(rounding);
+        }
+        "atan2" => {
+            x.atan2_round(&y, rounding);
+        }
+        _ => panic!("unknown operation: {op}"),
+    }
+    x
+}
+
+fn rounded(width: Width, value: &Float, rounding: Round) -> f64 {
+    match width {
+        Width::F32 => value.to_f32_round(rounding) as f64,
+        Width::F64 => value.to_f64_round(rounding),
+    }
+}
+
+fn bounds(width: Width, op: &str, input: [u64; 3]) -> [u64; 2] {
+    let nearest = reference(op, width, input, Round::Nearest);
+    let value = rounded(width, &nearest, Round::Nearest);
+    if !value.is_finite()
+        || nearest.is_zero()
+        || (matches!(op, "sin" | "cos") && width.value(input[0]) == 0.0)
+    {
+        return [width.bits(value); 2];
+    }
+
+    let down = reference(op, width, input, Round::Down);
+    let up = reference(op, width, input, Round::Up);
+    let (precision, minimum_exponent) = match width {
+        Width::F32 => (24, -149),
+        Width::F64 => (53, -1074),
+    };
+    // A result just below a power of two has the smaller ULP spacing.
+    // Directed references avoid doubling the tolerance through rounding.
+    let exponent =
+        (down.get_exp().unwrap().min(up.get_exp().unwrap()) - precision).max(minimum_exponent);
+    let tolerance = Float::with_val(PRECISION, 4) << exponent;
+
+    // Intersect both reference envelopes and round inward. Every accepted
+    // float is within 4 ULP of the mathematical result, not its rounded value.
+    let (lower, _) = Float::with_val_round(PRECISION, &up - &tolerance, Round::Up);
+    let (upper, _) = Float::with_val_round(PRECISION, &down + &tolerance, Round::Down);
+    let mut lower = rounded(width, &lower, Round::Up);
+    let mut upper = rounded(width, &upper, Round::Down);
+    if nearest.is_sign_positive() {
+        lower = lower.max(0.0);
+    } else {
+        upper = upper.min(-0.0);
+    }
+    [width.bits(lower), width.bits(upper)]
+}
+
+pub fn case(width: Width, op: &str, input: [u64; 3]) -> Case {
+    let names: &[&str] = if op == "sincos" {
+        &["sin", "cos"]
+    } else {
+        &[op]
+    };
+    Case {
+        input,
+        bounds: names
+            .iter()
+            .map(|name| bounds(width, name, input))
+            .collect(),
+    }
+}

@@ -1,0 +1,156 @@
+/*
+ * Derived from Arm optimized-routines math/aarch64/advsimd/atan.c and atan2.c, with changes.
+ */
+
+/*
+ * Copyright (c) 1999-2022, Arm Limited.
+ * Copyright (c) 2021-2025, Arm Limited.
+ * SPDX-License-Identifier: MIT
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+use core::simd::prelude::*;
+use std::simd::StdFloat;
+
+#[inline]
+fn atan_poly_f64<const N: usize>(z: Simd<f64, N>) -> Simd<f64, N> {
+    let c0 = Simd::splat(f64::from_bits(0xbfd555555555552a)); // -0x1.555555555552ap-2
+    let c1 = Simd::splat(f64::from_bits(0x3fc9999999995aeb)); // 0x1.9999999995aebp-3
+    let c2 = Simd::splat(f64::from_bits(0xbfc24924923923f6)); // -0x1.24924923923f6p-3
+    let c3 = Simd::splat(f64::from_bits(0x3fbc71c7184288a2)); // 0x1.c71c7184288a2p-4
+    let c4 = Simd::splat(f64::from_bits(0xbfb745d11fb3d32b)); // -0x1.745d11fb3d32bp-4
+    let c5 = Simd::splat(f64::from_bits(0x3fb3b136a18051b9)); // 0x1.3b136a18051b9p-4
+    let c6 = Simd::splat(f64::from_bits(0xbfb110e6d985f496)); // -0x1.110e6d985f496p-4
+    let c7 = Simd::splat(f64::from_bits(0x3fae1bcf7f08801d)); // 0x1.e1bcf7f08801dp-5
+    let c8 = Simd::splat(f64::from_bits(0xbfaae644e28058c3)); // -0x1.ae644e28058c3p-5
+    let c9 = Simd::splat(f64::from_bits(0x3fa82eeb1fed85c6)); // 0x1.82eeb1fed85c6p-5
+    let c10 = Simd::splat(f64::from_bits(0xbfa59d7f901566cb)); // -0x1.59d7f901566cbp-5
+    let c11 = Simd::splat(f64::from_bits(0x3fa2c982855ab069)); // 0x1.2c982855ab069p-5
+    let c12 = Simd::splat(f64::from_bits(0xbf9eb49592998177)); // -0x1.eb49592998177p-6
+    let c13 = Simd::splat(f64::from_bits(0x3f969d8b396e3d38)); // 0x1.69d8b396e3d38p-6
+    let c14 = Simd::splat(f64::from_bits(0xbf8ca980345c4204)); // -0x1.ca980345c4204p-7
+    let c15 = Simd::splat(f64::from_bits(0x3f7dc050eafde0b3)); // 0x1.dc050eafde0b3p-8
+    let c16 = Simd::splat(f64::from_bits(0xbf67ea70755b8ecc)); // -0x1.7ea70755b8eccp-9
+    let c17 = Simd::splat(f64::from_bits(0x3f4ba3da3de903e8)); // 0x1.ba3da3de903e8p-11
+    let c18 = Simd::splat(f64::from_bits(0xbf244a4b059b6f67)); // -0x1.44a4b059b6f67p-13
+    let c19 = Simd::splat(f64::from_bits(0x3eec4a45029e5a91)); // 0x1.c4a45029e5a91p-17
+    let p0_0 = z.mul_add(c1, c0);
+    let p0_1 = z.mul_add(c3, c2);
+    let p0_2 = z.mul_add(c5, c4);
+    let p0_3 = z.mul_add(c7, c6);
+    let p0_4 = z.mul_add(c9, c8);
+    let p0_5 = z.mul_add(c11, c10);
+    let p0_6 = z.mul_add(c13, c12);
+    let p0_7 = z.mul_add(c15, c14);
+    let p0_8 = z.mul_add(c17, c16);
+    let p0_9 = z.mul_add(c19, c18);
+    let z2 = z * z;
+    let p1_0 = z2.mul_add(p0_1, p0_0);
+    let p1_1 = z2.mul_add(p0_3, p0_2);
+    let p1_2 = z2.mul_add(p0_5, p0_4);
+    let p1_3 = z2.mul_add(p0_7, p0_6);
+    let p1_4 = z2.mul_add(p0_9, p0_8);
+    let z4 = z2 * z2;
+    let p2_0 = z4.mul_add(p1_1, p1_0);
+    let p2_1 = z4.mul_add(p1_3, p1_2);
+    let z8 = z4 * z4;
+    let p3_0 = z8.mul_add(p2_1, p2_0);
+    let z16 = z8 * z8;
+    let p4_0 = z16.mul_add(p1_4, p3_0);
+    p4_0
+}
+
+/// Computes atan(x), assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn atan_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    let red = x.abs().simd_gt(Simd::<f64, N>::splat(1.0));
+    let den = red.select(x, Simd::<f64, N>::splat(1.0));
+    let z = red.select(-Simd::<f64, N>::splat(1.0) / den, x);
+    let shift = red
+        .select(
+            Simd::<f64, N>::splat(core::f64::consts::FRAC_PI_2),
+            Simd::<f64, N>::splat(0.0),
+        )
+        .copysign(x);
+    let z2 = z * z;
+    let p = atan_poly_f64(z2);
+    let y = if core::mem::size_of::<f64>() == 8 {
+        let q = (-z2).mul_add(p, Simd::<f64, N>::splat(-1.0));
+        (-z).mul_add(q, shift)
+    } else {
+        (z * z2).mul_add(p, shift + z)
+    };
+    // Preserve negative zero and the exact tiny-input result.
+    let tiny = x.abs().simd_lt(Simd::<f64, N>::splat(1.0e-12));
+    tiny.select(x, y)
+}
+
+/// Computes atan2(y,x), assuming round-to-nearest, ties-to-even.
+#[inline]
+pub fn atan2_f64<const N: usize>(y: Simd<f64, N>, x: Simd<f64, N>) -> Simd<f64, N> {
+    let ax = x.abs();
+    let ay = y.abs();
+    let special = !x.is_finite()
+        | !y.is_finite()
+        | ax.simd_eq(Simd::<f64, N>::splat(0.0))
+        | ay.simd_eq(Simd::<f64, N>::splat(0.0));
+    let swap = ay.simd_gt(ax);
+    let numerator = swap.select(-ax, ay);
+    let denominator = special.select(Simd::<f64, N>::splat(1.0), swap.select(ay, ax));
+    let z = special.select(Simd::<f64, N>::splat(0.0), numerator) / denominator;
+    let shift: Simd<f64, N> = x
+        .simd_lt(Simd::<f64, N>::splat(0.0))
+        .select(Simd::<f64, N>::splat(-2.0), Simd::<f64, N>::splat(0.0))
+        + swap.select(Simd::<f64, N>::splat(1.0), Simd::<f64, N>::splat(0.0));
+    let z2 = z * z;
+    let p = atan_poly_f64(z2);
+    let ret = shift.mul_add(Simd::<f64, N>::splat(core::f64::consts::FRAC_PI_2), z);
+    let ret = (z * z2).mul_add(p, ret);
+    let sign = (x.to_bits() ^ y.to_bits()) & Simd::<u64, N>::splat(1 << (<u64>::BITS - 1));
+    let ret = Simd::from_bits(ret.to_bits() ^ sign);
+    if !special.any() {
+        return ret;
+    }
+    // Vector replacements for the upstream scalar exceptional calls.
+    let negative_x = x.is_sign_negative();
+    let infinite_x = negative_x.select(
+        Simd::<f64, N>::splat(core::f64::consts::PI),
+        Simd::<f64, N>::splat(0.0),
+    );
+    let both_infinite = negative_x.select(
+        Simd::<f64, N>::splat(3.0 * core::f64::consts::FRAC_PI_4),
+        Simd::<f64, N>::splat(core::f64::consts::FRAC_PI_4),
+    );
+    let infinite_x = y.is_infinite().select(both_infinite, infinite_x);
+    let exceptional = x.is_infinite().select(
+        infinite_x,
+        Simd::<f64, N>::splat(core::f64::consts::FRAC_PI_2),
+    );
+    let zero_y = negative_x.select(
+        Simd::<f64, N>::splat(core::f64::consts::PI),
+        Simd::<f64, N>::splat(0.0),
+    );
+    let exceptional = ay
+        .simd_eq(Simd::<f64, N>::splat(0.0))
+        .select(zero_y, exceptional)
+        .copysign(y);
+    let exceptional = (x.is_nan() | y.is_nan()).select(x + y, exceptional);
+    special.select(exceptional, ret)
+}

@@ -4,6 +4,8 @@ Vector Algorithms for Portability (libvapor)
 *libvapor* provides portable vectorized implementations of basic libm functions.
 
 ## License
-*libvapor* is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
 
-See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) for details.
+This library is licensed under MIT. It includes code adapted from other libraries
+under their respective licenses. See [COPYRIGHT](COPYRIGHT)
+for contributions, copyright notices and applicable licenses, and
+[LICENSES](LICENSES) for the full license texts.

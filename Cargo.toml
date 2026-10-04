@@ -2,6 +2,12 @@
 name = "libvapor"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+
+[workspace]
+members = ["tools/accuracy"]
+default-members = ["."]
+resolver = "2"
 
 [lib]
 name = "vapor"
@@ -10,7 +16,7 @@ name = "vapor"
 simd-macros = { git = "https://github.com/calebzulawski/simd-macros" }
 
 [dev-dependencies]
+libvapor-accuracy = { path = "tools/accuracy", default-features = false }
 paste = "1"
-proptest = "1"
-float_eq = "1"
 num = "0.4"
+proptest = { version = "1", default-features = false, features = ["std"] }
