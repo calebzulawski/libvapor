@@ -27,7 +27,7 @@ mod sqrt;
 pub use sqrt::{sqrt_f32, sqrt_f64};
 
 mod fma;
-pub use fma::fma_f32;
+pub use fma::{fma_f32, fma_f64};
 
 mod exp;
 pub use exp::{exp_f32, exp_f64};

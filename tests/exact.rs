@@ -11,14 +11,18 @@ use vapor::*;
 mod fma_software;
 #[path = "../src/sqrt/software.rs"]
 mod sqrt_software;
-use fma_software::fma_f32 as fma_software_f32;
+use fma_software::{fma_f32 as fma_software_f32, fma_f64 as fma_software_f64};
 use sqrt_software::{sqrt_f32 as sqrt_software_f32, sqrt_f64 as sqrt_software_f64};
 
 macro_rules! exact_tests {
-    ($kind:ident; $($function:ident ($($arg:ident),+) => $expected:expr;)+) => {
+    ($($function:ident ($($arg:ident),+) => $expected:expr;)+) => {
+        exact_tests!(@kind f32; $($function($($arg),+) => $expected;)+);
+        exact_tests!(@kind f64; $($function($($arg),+) => $expected;)+);
+    };
+    (@kind $kind:ident; $($function:ident ($($arg:ident),+) => $expected:expr;)+) => {
         paste::paste! {
             $(#[test]
-            fn [<test_ $function>]() {
+            fn [<test_ $function _ $kind>]() {
                 fn run<const N: usize>() {
                     let value = prop_oneof![
                         3 => proptest::num::$kind::ANY | proptest::num::$kind::SIGNALING_NAN,
@@ -30,7 +34,7 @@ macro_rules! exact_tests {
                         let [$($arg),+] = std::array::from_fn(|column| {
                             Simd::<$kind, N>::from_array(std::array::from_fn(|lane| input[lane][column]))
                         });
-                        let got = $function($($arg),+).to_array();
+                        let got = [<$function _ $kind>]($($arg),+).to_array();
                         for lane in 0..N {
                             let [$($arg),+] = input[lane];
                             let expected = $expected;
@@ -56,23 +60,14 @@ macro_rules! exact_tests {
     };
 }
 
-exact_tests!(f32;
-    trunc_f32(x) => x.trunc();
-    fract_f32(x) => x.fract();
-    floor_f32(x) => x.floor();
-    ceil_f32(x) => x.ceil();
-    round_f32(x) => x.round();
-    sqrt_f32(x) => x.sqrt();
-    sqrt_software_f32(x) => x.sqrt();
-    fma_f32(x, y, z) => x.mul_add(y, z);
-    fma_software_f32(x, y, z) => x.mul_add(y, z);
-);
-exact_tests!(f64;
-    trunc_f64(x) => x.trunc();
-    fract_f64(x) => x.fract();
-    floor_f64(x) => x.floor();
-    ceil_f64(x) => x.ceil();
-    round_f64(x) => x.round();
-    sqrt_f64(x) => x.sqrt();
-    sqrt_software_f64(x) => x.sqrt();
-);
+exact_tests! {
+    trunc(x) => x.trunc();
+    fract(x) => x.fract();
+    floor(x) => x.floor();
+    ceil(x) => x.ceil();
+    round(x) => x.round();
+    sqrt(x) => x.sqrt();
+    sqrt_software(x) => x.sqrt();
+    fma(x, y, z) => x.mul_add(y, z);
+    fma_software(x, y, z) => x.mul_add(y, z);
+}
