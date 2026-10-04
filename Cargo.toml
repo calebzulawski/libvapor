@@ -12,6 +12,10 @@ resolver = "2"
 [lib]
 name = "vapor"
 
+[features]
+# Use software math implementations even when the target supports hardware math.
+force-soft = []
+
 [dependencies]
 simd-macros = { git = "https://github.com/calebzulawski/simd-macros" }
 

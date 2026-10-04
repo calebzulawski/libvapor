@@ -1,4 +1,4 @@
-//! Portable SIMD exp.
+//! Portable SIMD exponentials.
 //! Implementation selection is confined to these public entry points.
 pub(crate) mod data;
 pub(crate) mod fma;
@@ -10,10 +10,7 @@ use core::simd::Simd;
 /// Computes e^x for each lane.
 #[inline]
 pub fn exp_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    if cfg!(any(
-        target_feature = "fma",
-        all(target_arch = "aarch64", target_feature = "neon")
-    )) {
+    if crate::backend::USE_HARDWARE_FMA {
         fma::exp_f32(x)
     } else {
         non_fma::exp_f32(x)
@@ -23,12 +20,29 @@ pub fn exp_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
 /// Computes e^x for each lane.
 #[inline]
 pub fn exp_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
-    if cfg!(any(
-        target_feature = "fma",
-        all(target_arch = "aarch64", target_feature = "neon")
-    )) {
+    if crate::backend::USE_HARDWARE_FMA {
         fma::exp_f64(x)
     } else {
         non_fma::exp_f64(x)
+    }
+}
+
+/// Computes 2^x for each lane.
+#[inline]
+pub fn exp2_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    if crate::backend::USE_HARDWARE_FMA {
+        fma::exp2_f32(x)
+    } else {
+        non_fma::exp2_f32(x)
+    }
+}
+
+/// Computes 2^x for each lane.
+#[inline]
+pub fn exp2_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    if crate::backend::USE_HARDWARE_FMA {
+        fma::exp2_f64(x)
+    } else {
+        non_fma::exp2_f64(x)
     }
 }

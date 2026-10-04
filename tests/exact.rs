@@ -7,13 +7,6 @@ use proptest::{
 use std::simd::Simd;
 use vapor::*;
 
-#[path = "../src/fma/software.rs"]
-mod fma_software;
-#[path = "../src/sqrt/software.rs"]
-mod sqrt_software;
-use fma_software::{fma_f32 as fma_software_f32, fma_f64 as fma_software_f64};
-use sqrt_software::{sqrt_f32 as sqrt_software_f32, sqrt_f64 as sqrt_software_f64};
-
 macro_rules! exact_tests {
     ($($function:ident ($($arg:ident),+) => $expected:expr;)+) => {
         exact_tests!(@kind f32; $($function($($arg),+) => $expected;)+);
@@ -67,7 +60,5 @@ exact_tests! {
     ceil(x) => x.ceil();
     round(x) => x.round();
     sqrt(x) => x.sqrt();
-    sqrt_software(x) => x.sqrt();
     fma(x, y, z) => x.mul_add(y, z);
-    fma_software(x, y, z) => x.mul_add(y, z);
 }
