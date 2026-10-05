@@ -5,6 +5,10 @@ on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -38,3 +42,35 @@ jobs:
             target/benchmarks/*.png
             target/benchmarks/*.svg
           if-no-files-found: error
+
+  publish:
+    name: Publish benchmark charts
+    needs: benchmark
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: benchmarks-*
+          path: target/benchmark-artifacts
+      - name: Collect benchmark PNGs
+        run: |
+          mkdir -p target/benchmark-site/benchmarks
+          for runner in ubuntu-24.04 ubuntu-24.04-arm macos-15; do
+            cp "target/benchmark-artifacts/benchmarks-$runner/speedup.png" \
+              "target/benchmark-site/benchmarks/$runner.png"
+          done
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: target/benchmark-site
+      - name: Deploy benchmark PNGs
+        id: deployment
+        uses: actions/deploy-pages@v5
