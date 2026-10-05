@@ -22,5 +22,4 @@ simd-macros = { git = "https://github.com/calebzulawski/simd-macros" }
 [dev-dependencies]
 libvapor-accuracy = { path = "tools/accuracy", default-features = false }
 paste = "1"
-num = "0.4"
 proptest = { version = "1", default-features = false, features = ["std"] }

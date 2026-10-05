@@ -1,0 +1,18 @@
+{
+  "x86_64": {
+    "notes": "v4: prefer 512-bit vectors",
+    "profiles": {
+      "x86-64-v1": ["-Ctarget-cpu=x86-64"],
+      "x86-64-v2": ["-Ctarget-cpu=x86-64-v2"],
+      "x86-64-v3": ["-Ctarget-cpu=x86-64-v3"],
+      "x86-64-v4": ["-Ctarget-cpu=x86-64-v4", "-Ctarget-feature=-prefer-256-bit"]
+    }
+  },
+  "other": {
+    "notes": "",
+    "profiles": {
+      "baseline": ["-Ctarget-cpu=generic"],
+      "native": ["-Ctarget-cpu=native"]
+    }
+  }
+}
