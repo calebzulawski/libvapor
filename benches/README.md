@@ -10,3 +10,13 @@ python3 benches/run.py
 ```
 
 Results and plots are saved to `target/benchmarks/`.
+
+## WASM
+
+Install [Wasmtime](https://docs.wasmtime.dev/cli-install.html) and put `wasmtime`
+on `PATH`, then run the same benchmark harness through WASI:
+
+```sh
+rustup target add --toolchain nightly wasm32-wasip1
+python3 benches/run.py --target wasm32-wasip1
+```

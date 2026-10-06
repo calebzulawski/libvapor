@@ -149,9 +149,13 @@ def draw_panels(axes, profiles, operations, values, lanes):
 
 def label_figure(fig, left, profiles, metadata):
     figure_height = fig.get_figheight()
-    fig.text(0.045, 1 - 0.45 / figure_height, "libvapor vs plain Rust · f32 and f64", fontsize=21,
+    target = metadata.get("target", metadata.get("host", ""))
+    title = "libvapor vs plain Rust" + (f" · {target}" if target else "")
+    fig.text(0.045, 1 - 0.45 / figure_height, title, fontsize=21,
              fontweight="bold", color="#172B4D")
-    environment = " · ".join(value for value in [metadata.get("cpu"), metadata.get("os", metadata.get("system"))] if value)
+    environment = [metadata.get("cpu"), metadata.get("os", metadata.get("system")),
+                   metadata.get("runtime", "").split(" (", 1)[0]]
+    environment = " · ".join(value for value in environment if value)
     fig.text(0.045, 1 - 0.83 / figure_height, environment or "Benchmark results",
              fontsize=11, color="#526175")
     handles, labels = left.get_legend_handles_labels()

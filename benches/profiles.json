@@ -8,6 +8,13 @@
       "x86-64-v4": ["-Ctarget-cpu=x86-64-v4", "-Ctarget-feature=-prefer-256-bit"]
     }
   },
+  "wasm32": {
+    "notes": "",
+    "profiles": {
+      "simd128": ["-Ctarget-cpu=generic", "-Ctarget-feature=+simd128,-relaxed-simd"],
+      "simd128-relaxed": ["-Ctarget-cpu=generic", "-Ctarget-feature=+simd128,+relaxed-simd"]
+    }
+  },
   "other": {
     "notes": "",
     "profiles": {

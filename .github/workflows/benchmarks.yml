@@ -43,9 +43,40 @@ jobs:
             target/benchmarks/*.svg
           if-no-files-found: error
 
+  benchmark-wasm:
+    name: Benchmarks (WASM on x86 Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-wasip1
+      - uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: '49.0.2'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install benchmark dependencies
+        run: python -m pip install -r benches/requirements.txt
+      - name: Run WASM benchmarks and generate plots
+        run: python benches/run.py --target wasm32-wasip1
+      - name: Upload WASM benchmark results
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarks-wasm32-wasip1
+          path: |
+            target/benchmarks-wasm/*.json
+            target/benchmarks-wasm/*.jsonl
+            target/benchmarks-wasm/*.csv
+            target/benchmarks-wasm/*.png
+            target/benchmarks-wasm/*.svg
+          if-no-files-found: error
+
   publish:
     name: Publish benchmark charts
-    needs: benchmark
+    needs: [benchmark, benchmark-wasm]
     if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -63,7 +94,7 @@ jobs:
       - name: Collect benchmark PNGs
         run: |
           mkdir -p target/benchmark-site/benchmarks
-          for runner in ubuntu-24.04 ubuntu-24.04-arm macos-15; do
+          for runner in ubuntu-24.04 ubuntu-24.04-arm macos-15 wasm32-wasip1; do
             cp "target/benchmark-artifacts/benchmarks-$runner/speedup.png" \
               "target/benchmark-site/benchmarks/$runner.png"
           done

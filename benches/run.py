@@ -42,8 +42,10 @@ def x86_cpu_level(output):
         env=env, text=True))
 
 
-def load_profiles(output):
+def load_profiles(output, target):
     architecture = "x86_64" if platform.machine().lower() in {"x86_64", "amd64"} else "other"
+    if target == "wasm32-wasip1":
+        architecture = "wasm32"
     config = json.loads((BENCHES / "profiles.json").read_text())[architecture]
     profiles = config["profiles"]
     if architecture == "x86_64":
@@ -52,12 +54,14 @@ def load_profiles(output):
     return profiles, config["notes"]
 
 
-def run_profile(name, flags, output, cpu):
+def run_profile(name, flags, output, cpu, target):
     print(f"Running {name}: {' '.join(flags)}", flush=True)
     env = {**os.environ, "RUSTFLAGS": " ".join(flags)}
     env.pop("CARGO_ENCODED_RUSTFLAGS", None)
-    command = ["cargo", "+nightly", "bench", "--bench", "math", "--target", "host-tuple",
+    command = ["cargo", "+nightly", "bench", "--locked", "--bench", "math", "--target", target,
                "--target-dir", str(output / "build")]
+    if target == "wasm32-wasip1":
+        env["CARGO_TARGET_WASM32_WASIP1_RUNNER"] = "wasmtime run -W relaxed-simd=y --"
     subprocess.run(command + ["--no-run"], cwd=ROOT, env=env, check=True)
     with (output / f"{name.removeprefix('x86-64-')}.jsonl").open("w") as log:
         subprocess.run(command + ["--", "--test-threads=1", "--format=json", "-Zunstable-options"],
@@ -68,16 +72,24 @@ def run_profile(name, flags, output, cpu):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "target/benchmarks")
+    parser.add_argument("--target", choices=["host-tuple", "wasm32-wasip1"], default="host-tuple")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    output = args.output.resolve()
+    directory = "benchmarks-wasm" if args.target == "wasm32-wasip1" else "benchmarks"
+    output = (args.output or ROOT / "target" / directory).resolve()
     output.mkdir(parents=True, exist_ok=True)
     os.environ["PATH"] += os.pathsep + str(Path.home() / ".cargo/bin")
-    profiles, notes = load_profiles(output)
+    profiles, notes = load_profiles(output, args.target)
     cpu = min(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None
     metadata = make_metadata(notes)
+    metadata["target"] = args.target
+    if args.target == "host-tuple":
+        metadata["target"] = subprocess.check_output(
+            ["rustc", "+nightly", "--print", "host-tuple"], text=True).strip()
+    else:
+        metadata["runtime"] = subprocess.check_output(["wasmtime", "--version"], text=True).strip()
     for name, flags in profiles.items():
-        metadata["builds"].append(run_profile(name, flags, output, cpu))
+        metadata["builds"].append(run_profile(name, flags, output, cpu, args.target))
         (output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     subprocess.run([sys.executable, str(BENCHES / "plot.py"), str(output)], check=True)
 
