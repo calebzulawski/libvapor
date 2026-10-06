@@ -42,7 +42,7 @@ pub struct Fixtures {
     pub cases: Vec<Case>,
 }
 
-pub const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/data/mpfr.json");
+pub const FIXTURE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/data/mpfr.json");
 
 pub fn load(path: impl AsRef<Path>) -> Result<Vec<Fixtures>, Box<dyn std::error::Error>> {
     let data = fs::read(path)?;

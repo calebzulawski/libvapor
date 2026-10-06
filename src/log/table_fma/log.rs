@@ -30,7 +30,7 @@
 use core::simd::prelude::*;
 use std::simd::StdFloat;
 
-const LOG_POLY: [f64; 5] = [
+pub(crate) const LOG_POLY: [f64; 5] = [
     f64::from_bits(0xbfdffffffffffff7), // -0x1.ffffffffffff7p-2
     f64::from_bits(0x3fd55555555170d4), // 0x1.55555555170d4p-2
     f64::from_bits(0xbfd0000000399c27), // -0x1.0000000399c27p-2
@@ -38,7 +38,7 @@ const LOG_POLY: [f64; 5] = [
     f64::from_bits(0xbfc554e550bd501e), // -0x1.554e550bd501ep-3
 ];
 
-const LOG_CENTER: [f64; 128] = [
+pub(crate) const LOG_CENTER: [f64; 128] = [
     f64::from_bits(0xbfd62fe995eb963a),
     f64::from_bits(0xbfd5d5a48dad6b67),
     f64::from_bits(0xbfd57bde257d2769),
@@ -169,7 +169,7 @@ const LOG_CENTER: [f64; 128] = [
     f64::from_bits(0x3fd5d1d758e45217),
 ];
 
-const INVC: [f64; 128] = [
+pub(crate) const INVC: [f64; 128] = [
     f64::from_bits(0x3ff6a133d0dec120),
     f64::from_bits(0x3ff6815f2f3e42ed),
     f64::from_bits(0x3ff661e39be1ac9e),

@@ -8,3 +8,6 @@ mod log2;
 pub(crate) use log::log_f64;
 pub(crate) use log10::log10_f64;
 pub(crate) use log2::log2_f64;
+
+pub(crate) use log::{INVC, LOG_CENTER, LOG_POLY};
+pub(crate) use log2::{LOG2_CENTER, LOG2_POLY};

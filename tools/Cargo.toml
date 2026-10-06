@@ -1,5 +1,5 @@
 [package]
-name = "libvapor-accuracy"
+name = "libvapor-tools"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -13,7 +13,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [dev-dependencies]
-vapor = { package = "libvapor", path = "../.." }
+vapor = { package = "libvapor", path = ".." }
 paste = "1"
 proptest = { version = "1", default-features = false, features = ["std"] }
 
@@ -26,4 +26,11 @@ required-features = ["oracle"]
 
 [[test]]
 name = "transcendental_live"
+required-features = ["oracle"]
+
+[[bin]]
+name = "generate-log-centers"
+path = "src/bin/generate_log_centers.rs"
+test = false
+bench = false
 required-features = ["oracle"]

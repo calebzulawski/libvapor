@@ -1,4 +1,4 @@
-use libvapor_accuracy::{oracle, serialization};
+use libvapor_tools::{oracle, serialization};
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

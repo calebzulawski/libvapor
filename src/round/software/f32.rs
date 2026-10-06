@@ -28,9 +28,28 @@
 
 use core::simd::prelude::*;
 
+use super::{MODE_CEIL, MODE_FLOOR, MODE_ROUND_TIES_AWAY, MODE_TRUNC};
+
 #[inline]
 fn rounded_f32<const N: usize, const MODE: u8>(x: Simd<f32, N>) -> Simd<f32, N> {
     let ax = x.abs();
+    if super::USE_INT_CONVERSION && (MODE == MODE_TRUNC || MODE == MODE_ROUND_TIES_AWAY) {
+        // Larger finite f32 values are already integers. An ordered comparison
+        // also excludes infinities and NaNs from the conversion.
+        let regular = ax.simd_lt(Simd::splat(8388608.0));
+        let a = regular.select(ax, Simd::splat(0.0));
+        // SAFETY: every lane is finite and in [0, 2^23), within the i32 range.
+        let integer = unsafe { a.to_int_unchecked::<i32>() }.cast::<f32>();
+        let y = if MODE == MODE_TRUNC {
+            integer
+        } else {
+            // Compare the exact fractional remainder rather than adding 0.5,
+            // which could round a value just below a halfway point upward.
+            let up = (a - integer).simd_ge(Simd::splat(0.5));
+            integer + up.select(Simd::splat(1.0), Simd::splat(0.0))
+        };
+        return regular.select(y.copysign(x), x);
+    }
     let large = ax.simd_ge(Simd::splat(8388608.0f32)) | !x.is_finite();
     let a = large.select(Simd::splat(0.0), ax);
     let bias = Simd::splat(8388608.0f32);
@@ -38,14 +57,14 @@ fn rounded_f32<const N: usize, const MODE: u8>(x: Simd<f32, N>) -> Simd<f32, N> 
     let down = nearest.simd_gt(a);
     let zero = Simd::splat(0.0);
     let one = Simd::splat(1.0);
-    let y = if MODE == 0 {
+    let y = if MODE == MODE_TRUNC {
         nearest - down.select(one, zero)
-    } else if MODE == 1 {
+    } else if MODE == MODE_FLOOR {
         let signed = nearest.copysign(x);
         // Subtracting +0 preserves -0, so this needs only one
         // comparison and no sign-dependent adjustment masks.
         return large.select(x, signed - signed.simd_gt(x).select(one, zero));
-    } else if MODE == 2 {
+    } else if MODE == MODE_CEIL {
         let signed = nearest.copysign(x);
         // ceil(x) = -floor(-x). Keep the subtraction form to
         // preserve negative zero when a negative input rounds up.
@@ -59,25 +78,25 @@ fn rounded_f32<const N: usize, const MODE: u8>(x: Simd<f32, N>) -> Simd<f32, N> 
 /// Rounds each lane toward zero.
 #[inline]
 pub fn trunc_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    rounded_f32::<N, 0>(x)
+    rounded_f32::<N, MODE_TRUNC>(x)
 }
 
 /// Rounds each lane toward negative infinity.
 #[inline]
 pub fn floor_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    rounded_f32::<N, 1>(x)
+    rounded_f32::<N, MODE_FLOOR>(x)
 }
 
 /// Rounds each lane toward positive infinity.
 #[inline]
 pub fn ceil_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    rounded_f32::<N, 2>(x)
+    rounded_f32::<N, MODE_CEIL>(x)
 }
 
 /// Rounds each lane to nearest, with ties away from zero.
 #[inline]
 pub fn round_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    rounded_f32::<N, 3>(x)
+    rounded_f32::<N, MODE_ROUND_TIES_AWAY>(x)
 }
 
 /// Computes the fractional part of each lane.
@@ -88,46 +107,9 @@ pub fn fract_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::tests::rounding_boundaries;
     use super::*;
 
-    #[test]
-    fn round_halfway_and_neighbors() {
-        let below = 0.5f32.next_down();
-        let above = 0.5f32.next_up();
-        let x = Simd::from_array([below, 0.5, above, 2.5, -below, -0.5, -above, -2.5]);
-        let expected = [0.0f32, 1.0, 1.0, 3.0, -0.0, -1.0, -1.0, -3.0];
-        assert_eq!(
-            round_f32(x).to_array().map(f32::to_bits),
-            expected.map(f32::to_bits)
-        );
-    }
-
-    #[test]
-    fn rounding_at_integer_precision_boundary() {
-        let boundary = 8388608.0f32; // 2^23: all larger f32 values are integers.
-        let x = Simd::from_array([
-            boundary.next_down(),
-            boundary,
-            boundary.next_up(),
-            -boundary.next_down(),
-            -boundary,
-            -boundary.next_up(),
-            0.75,
-            -0.75,
-        ]);
-        let input = x.to_array();
-        for (name, result, expected) in [
-            ("trunc", trunc_f32(x), input.map(f32::trunc)),
-            ("floor", floor_f32(x), input.map(f32::floor)),
-            ("ceil", ceil_f32(x), input.map(f32::ceil)),
-            ("round", round_f32(x), input.map(f32::round)),
-            ("fract", fract_f32(x), input.map(f32::fract)),
-        ] {
-            assert_eq!(
-                result.to_array().map(f32::to_bits),
-                expected.map(f32::to_bits),
-                "{name}"
-            );
-        }
-    }
+    // 2^23: every larger finite f32 value is already integral.
+    rounding_boundaries!(f32; 8388608.0);
 }

@@ -68,17 +68,21 @@ fn add<const N: usize>(a: Simd<f64, N>, b: Simd<f64, N>) -> (Simd<f64, N>, Simd<
 fn multiply<const N: usize>(a: Simd<f64, N>, b: Simd<f64, N>) -> (Simd<f64, N>, Simd<f64, N>) {
     // Product split: Dekker, A Floating-Point Technique for Extending the
     // Available Precision, Numer. Math. 18, 224-242 (1971), as cited upstream.
-    let split = Simd::splat(134217729.0); // 1 + 2^27
-    let p = a * split;
-    let ha = (a - p) + p;
+    // Round the significands to 26 bits with integer operations. Either
+    // direction at a midpoint gives an exact split, so ties may round up.
+    let split = |v: Simd<f64, N>| {
+        Simd::from_bits((v.to_bits() + Simd::splat(1 << 26)) & Simd::splat(!((1 << 27) - 1)))
+    };
+    let ha = split(a);
     let la = a - ha;
-    let p = b * split;
-    let hb = (b - p) + p;
+    let hb = split(b);
     let lb = b - hb;
-    let p = ha * hb;
-    let q = ha * lb + la * hb;
-    let hi = p + q;
-    let lo = ((p - hi) + q) + la * lb;
+    // Veltkamp's exact-product variant, described in Dekker's report,
+    // section 5, p. 20: https://ir.cwi.nl/pub/9158/9158D.pdf
+    // Compute the rounded product directly so the addend's sum can start
+    // while the exact product residual is still being evaluated.
+    let hi = a * b;
+    let lo = (((ha * hb - hi) + ha * lb) + la * hb) + la * lb;
     (hi, lo)
 }
 
@@ -88,9 +92,14 @@ fn add_adjusted<const N: usize>(a: Simd<f64, N>, b: Simd<f64, N>) -> Simd<f64, N
     // Round the low-part addition to odd, preserving its discarded bits as
     // sticky information for the final addition to the high part.
     let bits = hi.to_bits();
-    let adjust = lo.simd_ne(Simd::splat(0.0)) & (bits & Simd::splat(1)).simd_eq(Simd::splat(0));
+    // An all-ones mask for even significands avoids an emulated SSE2
+    // 64-bit comparison; odd significands need no adjustment.
+    let even = (bits & Simd::splat(1)) - Simd::splat(1);
     let step = Simd::splat(1) - (((bits ^ lo.to_bits()) >> 62) & Simd::splat(2));
-    Simd::from_bits(adjust.select(bits + step, bits))
+    let step = lo
+        .simd_ne(Simd::splat(0.0))
+        .select(even & step, Simd::splat(0));
+    Simd::from_bits(bits + step)
 }
 
 #[inline]
@@ -110,30 +119,20 @@ pub(super) fn fma_f64<const N: usize>(
     y: Simd<f64, N>,
     z: Simd<f64, N>,
 ) -> Simd<f64, N> {
-    if N > 1 && !cfg!(target_feature = "avx") {
-        // SSE2 emulates the full-range vector integer operations, and its
-        // vector range checks add overhead for mixed inputs. Reuse the
-        // optimized scalar kernel per lane to retain scalar performance
-        // across the full input range, including exceptional values.
-        let x = x.to_array();
-        let y = y.to_array();
-        let z = z.to_array();
-        return Simd::from_array(core::array::from_fn(|lane| {
-            fma_f64::<1>(
-                Simd::splat(x[lane]),
-                Simd::splat(y[lane]),
-                Simd::splat(z[lane]),
-            )[0]
-        }));
-    }
     // These bounds keep every nonzero product, split and residual normal.
     // Even the smallest product bit is at least 2^-1006, above 2^-1022.
     // Inspect 32-bit exponent fields: SSE2 can compare these directly, and
     // integer range checks avoid FP assists for subnormal input lanes.
-    let exponent = |v: Simd<f64, N>| (v.to_bits() >> 52).cast::<u32>() & Simd::splat(0x7ff);
-    let bounded = (exponent(x) - Simd::splat(573)).simd_lt(Simd::splat(900))
-        & (exponent(y) - Simd::splat(573)).simd_lt(Simd::splat(900))
-        & (exponent(z) - Simd::splat(123)).simd_lt(Simd::splat(1800));
+    let in_range = |v: Simd<f64, N>, first: i32, count: i32| {
+        // Leave the exponent in the high 32-bit word to avoid shifting and
+        // narrowing 64-bit lanes. Bias the unsigned range into one signed
+        // comparison, which SSE2 supports without another sign-bit XOR.
+        let exponent = (v.to_bits() >> 32).cast::<i32>() & Simd::splat(0x7ff00000);
+        (exponent + Simd::splat(i32::MIN.wrapping_sub(first << 20)))
+            .simd_lt(Simd::splat(i32::MIN + (count << 20)))
+    };
+    let bounded =
+        in_range(x, 1023 - 450, 900) & in_range(y, 1023 - 450, 900) & in_range(z, 1023 - 900, 1800);
     if bounded.all() {
         double_double(x, y, z)
     } else {
@@ -141,7 +140,8 @@ pub(super) fn fma_f64<const N: usize>(
     }
 }
 
-#[inline(always)]
+#[cold]
+#[inline(never)]
 fn general<const N: usize>(
     x: Simd<f64, N>,
     y: Simd<f64, N>,
@@ -149,7 +149,7 @@ fn general<const N: usize>(
     bounded: Mask<i32, N>,
 ) -> Simd<f64, N> {
     if N == 1 {
-        super::fma_f64_integer(x, y, z)
+        super::integer::fma_f64(x, y, z)
     } else {
         let bounded = bounded.to_array();
         // Use the scalar integer kernel for full-range lanes, and retain
@@ -165,7 +165,7 @@ fn general<const N: usize>(
                     Simd::splat(z[lane]),
                 )[0]
             } else {
-                super::fma_f64_integer::<1>(
+                super::integer::fma_f64::<1>(
                     Simd::splat(x[lane]),
                     Simd::splat(y[lane]),
                     Simd::splat(z[lane]),
