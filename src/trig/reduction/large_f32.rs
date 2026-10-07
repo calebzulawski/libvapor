@@ -30,16 +30,35 @@ use core::simd::prelude::*;
 use simd_macros::vectorize;
 
 pub(super) fn reduce_large_f32<const N: usize>(bits: Simd<u64, N>) -> Reduced<N> {
-    let (quadrant, hi) = vectorize!(N, {
-        // Reconstruct the fractional part of x*2/pi with a 32x96-bit product.
-        // Each lane gathers its own window of the 192-bit 4/pi table.
+    let (index, xi) = vectorize!(N, {
         let index = (bits >> 26) & 15;
         let index = index as usize;
         let shift = (bits >> 23) & 7;
         let xi = ((bits & 0xffffff) | 0x800000) << shift;
-        let res0 = xi * (<u32>::gather_or(&INV_PIO4_F32, index, 0) as u64);
-        let res1 = xi * (<u32>::gather_or(&INV_PIO4_F32, index + 4, 0) as u64);
-        let res2 = xi * (<u32>::gather_or(&INV_PIO4_F32, index + 8, 0) as u64);
+        (index, xi)
+    });
+    const TABLE: [[u64; 2]; 16] = {
+        let mut table = [[0; 2]; 16];
+        let mut i = 0;
+        while i < table.len() {
+            table[i] = [
+                INV_PIO4_F32[i] as u64 | ((INV_PIO4_F32[i + 4] as u64) << 32),
+                INV_PIO4_F32[i + 8] as u64,
+            ];
+            i += 1;
+        }
+        table
+    };
+    let (first, third) = crate::table::lookup_pairs(&TABLE, index);
+    let (res0, res1, res2) = vectorize!(N, {
+        (
+            xi * (first & 0xffffffff),
+            xi * (first >> 32),
+            xi * (third & 0xffffffff),
+        )
+    });
+    let (quadrant, hi) = vectorize!(N, {
+        // Reconstruct the fractional part of x*2/pi with a 32x96-bit product.
         let res0 = (res2 >> 32) | (res0 << 32);
         let res0 = res0 + res1;
         let quadrant = (res0 + (1u64 << 61)) >> 62;

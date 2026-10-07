@@ -80,9 +80,14 @@ fn kernel<const N: usize, const BASE2: bool>(bits: Simd<u64, N>) -> Simd<f64, N>
     let index = (u >> INDEX_SHIFT) & Simd::splat(TABLE_SIZE as u64 - 1);
     let center = Simd::<f64, N>::from_bits(off + (index << INDEX_SHIFT));
     let table = if BASE2 { &LOG2_TABLE } else { &LOG_TABLE };
-    let rows = index.cast::<usize>().to_array().map(|i| table[i]);
-    let invc = Simd::from_array(core::array::from_fn(|lane| rows[lane][0]));
-    let logc = Simd::from_array(core::array::from_fn(|lane| rows[lane][1]));
+    let index = index.cast::<usize>();
+    let mut invc = Simd::splat(0.0);
+    let mut logc = Simd::splat(0.0);
+    for lane in 0..N {
+        let row = &table[index[lane]];
+        invc[lane] = row[0];
+        logc[lane] = row[1];
+    }
     // z and center are within a factor of two, so z - center is exact.
     // The center at one also avoids cancellation for inputs near one.
     let r = (z - center) * invc;

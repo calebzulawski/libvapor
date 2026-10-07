@@ -306,9 +306,8 @@ fn kernel<const N: usize>(bits: Simd<u64, N>) -> Simd<f64, N> {
     let k = (u.cast::<i64>() >> 52).cast::<i32>().cast::<f64>();
     let z = Simd::<f64, N>::from_bits(bits - (u & Simd::splat(0xfff0000000000000)));
     let index = ((u >> 45) & Simd::splat(127)).cast::<usize>();
-    let invc = Simd::gather_or(&INVC, index, Simd::splat(0.0));
-    let center = { &LOG10_CENTER };
-    let logc = Simd::gather_or(center, index, Simd::splat(0.0));
+    let table = &const { super::interleave(&INVC, &LOG10_CENTER) };
+    let (invc, logc) = crate::table::lookup_pairs(table, index);
     let r = z.mul_add(invc, Simd::splat(-1.0));
     let hi = {
         let hi = r.mul_add(Simd::splat(core::f64::consts::LOG10_E), logc);

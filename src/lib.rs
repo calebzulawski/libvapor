@@ -7,6 +7,7 @@
 #![feature(portable_simd)]
 
 mod backend;
+mod table;
 
 mod round;
 pub use round::{

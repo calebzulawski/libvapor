@@ -88,6 +88,8 @@ fn exp_scale_f64<const N: usize>(
     })
 }
 
+// Inlining keeps the coefficients and scale exponent constant.
+#[inline(always)]
 fn exp_poly_f64<const N: usize>(
     ki: Simd<u64, N>,
     r: Simd<f64, N>,
@@ -95,11 +97,12 @@ fn exp_poly_f64<const N: usize>(
     large: Mask<i64, N>,
     scale_exponent: u64,
 ) -> Simd<f64, N> {
+    let index = (ki & Simd::splat(127)).cast::<usize>();
+    let (table, _) = TABLE_F64.as_chunks::<2>();
+    let (tail, scale) = crate::table::lookup_pairs(table, index);
+    let tail = Simd::<f64, N>::from_bits(tail);
+    let sbits = scale + (ki << (52 - TABLE_BITS_F64));
     vectorize!(N, {
-        let i = ki & 127;
-        let i = i as usize * 2;
-        let tail = <f64>::from_bits(<u64>::gather_or(&TABLE_F64, i, 0));
-        let sbits = <u64>::gather_or(&TABLE_F64, i + 1, 0) + (ki << scalar!(52 - TABLE_BITS_F64));
         let r2 = r * r;
         let tmp = tail
             + r * scalar!(poly[0])

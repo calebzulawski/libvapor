@@ -27,22 +27,30 @@ pub(super) fn reduce_large_f64<const N: usize>(ax: Simd<f64, N>) -> Reduced<N> {
     let mut words = [Simd::splat(0u64); 9];
     let mut carry = Simd::splat(0u64);
     let mut previous = Simd::splat(0u64);
+    // Consecutive table windows overlap by one word.
+    let mut next_word = Simd::gather_or(
+        &TWO_OVER_PI_F64,
+        (index + Simd::splat(1)).cast::<usize>(),
+        Simd::splat(0),
+    )
+    .cast::<u64>();
     for (i, word) in words.iter_mut().enumerate() {
-        let (product, next_carry, current) = vectorize!(N, {
+        let (product, next_carry, current, a) = vectorize!(N, {
             let j = index - scalar!(i as u64);
             let j = j as usize;
             let a = <u32>::gather_or(&TWO_OVER_PI_F64, j, 0) as u64;
-            let b = <u32>::gather_or(&TWO_OVER_PI_F64, j + 1, 0) as u64;
+            let b = next_word;
             let current = ((a << shift) | (b >> (32 - shift))) & 0xffffffff;
             let p0 = current * m0;
             let p1 = previous * m1;
             let sum = (p0 & 0xffffffff) + (p1 & 0xffffffff) + carry;
             let next_carry = (p0 >> 32) + (p1 >> 32) + (sum >> 32);
-            (sum & 0xffffffff, next_carry, current)
+            (sum & 0xffffffff, next_carry, current, a)
         });
         *word = product;
         carry = next_carry;
         previous = current;
+        next_word = a;
     }
     let round_up = words[7].simd_ge(Simd::splat(0x80000000));
     let quadrant = (words[8] + round_up.select(Simd::splat(1), Simd::splat(0))) & Simd::splat(3);

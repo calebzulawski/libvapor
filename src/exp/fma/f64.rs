@@ -212,7 +212,10 @@ fn exp_f64_kernel<const N: usize, const BASE2: bool>(x: Simd<f64, N>) -> Simd<f6
     };
     let u = shifted.to_bits();
     let index = (u & Simd::splat(127)).cast::<usize>();
-    let table = Simd::gather_or(&SCALE, index, Simd::splat(0));
+    let mut table = Simd::splat(0);
+    for lane in 0..N {
+        table[lane] = SCALE[index[lane]];
+    }
     let scale = Simd::<f64, N>::from_bits(table + (u << 45));
     let y = scale.mul_add(poly, scale);
     y
