@@ -1,5 +1,6 @@
 /*
  * Derived from Arm optimized-routines v23.01 math/v_sinf.c, with changes.
+ * SPDX-License-Identifier: MIT
  */
 
 /*

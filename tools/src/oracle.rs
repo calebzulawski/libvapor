@@ -1,6 +1,7 @@
 //! MPFR references for transcendental tests.
 
 use crate::{Case, Width};
+use rug::ops::{PowAssignRound, RemAssignRound};
 use rug::{float::Round, Float};
 
 pub const PRECISION: u32 = 768;
@@ -8,11 +9,29 @@ pub const PRECISION: u32 = 768;
 fn reference(op: &str, width: Width, input: [u64; 3], rounding: Round) -> Float {
     let [mut x, y, _] = input.map(|bits| Float::with_val(PRECISION, width.value(bits)));
     match op {
+        "fmod" => {
+            x.rem_assign_round(&y, rounding);
+        }
+        "remainder" => {
+            x.remainder_round(&y, rounding);
+        }
+        "cbrt" => {
+            x.cbrt_round(rounding);
+        }
+        "hypot" => {
+            x.hypot_round(&y, rounding);
+        }
         "exp" => {
             x.exp_round(rounding);
         }
         "exp2" => {
             x.exp2_round(rounding);
+        }
+        "expm1" => {
+            x.exp_m1_round(rounding);
+        }
+        "pow" => {
+            x.pow_assign_round(&y, rounding);
         }
         "log" => {
             x.ln_round(rounding);
@@ -35,17 +54,47 @@ fn reference(op: &str, width: Width, input: [u64; 3], rounding: Round) -> Float 
         "tan" => {
             x.tan_round(rounding);
         }
-        "atan" => {
-            x.atan_round(rounding);
-        }
         "asin" => {
             x.asin_round(rounding);
         }
         "acos" => {
             x.acos_round(rounding);
         }
+        "atan" => {
+            x.atan_round(rounding);
+        }
         "atan2" => {
             x.atan2_round(&y, rounding);
+        }
+        "sinh" => {
+            x.sinh_round(rounding);
+        }
+        "cosh" => {
+            x.cosh_round(rounding);
+        }
+        "tanh" => {
+            x.tanh_round(rounding);
+        }
+        "asinh" => {
+            x.asinh_round(rounding);
+        }
+        "acosh" => {
+            x.acosh_round(rounding);
+        }
+        "atanh" => {
+            x.atanh_round(rounding);
+        }
+        "erf" => {
+            x.erf_round(rounding);
+        }
+        "erfc" => {
+            x.erfc_round(rounding);
+        }
+        "lgamma" => {
+            x.ln_abs_gamma_round(rounding);
+        }
+        "tgamma" => {
+            x.gamma_round(rounding);
         }
         _ => panic!("unknown operation: {op}"),
     }
@@ -62,7 +111,8 @@ fn rounded(width: Width, value: &Float, rounding: Round) -> f64 {
 fn bounds(width: Width, op: &str, input: [u64; 3]) -> [u64; 2] {
     let nearest = reference(op, width, input, Round::Nearest);
     let value = rounded(width, &nearest, Round::Nearest);
-    if !value.is_finite()
+    if matches!(op, "fmod" | "remainder")
+        || !value.is_finite()
         || nearest.is_zero()
         || (matches!(op, "sin" | "cos") && width.value(input[0]) == 0.0)
     {

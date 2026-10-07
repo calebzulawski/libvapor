@@ -1,5 +1,6 @@
 /*
  * Derived from Arm optimized-routines math/sincosf.h (reduce_large), with changes.
+ * SPDX-License-Identifier: MIT
  */
 
 /*

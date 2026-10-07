@@ -1,9 +1,16 @@
-#![feature(portable_simd, test)]
+#![feature(portable_simd, test, float_gamma, float_erf)]
 
 extern crate test;
 
 use std::{hint::black_box, simd::Simd};
 use test::Bencher;
+
+mod libm {
+    unsafe extern "C" {
+        pub(super) fn remainder(x: f64, y: f64) -> f64;
+        pub(super) fn remainderf(x: f32, y: f32) -> f32;
+    }
+}
 
 // One iteration processes 32 vectors. Input generation is outside the timer.
 const BATCH_SIZE: usize = 32;
@@ -64,6 +71,26 @@ macro_rules! benchmark {
             }
         }
     };
+    (@scalar_output fmod, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident, $y:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
+            $x[lane] % $y[lane]
+        })))
+    };
+    (@scalar_output remainder, f32, $lanes:literal, $scalar:ident, ($x:ident, $y:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| unsafe {
+            libm::remainderf($x[lane], $y[lane])
+        })))
+    };
+    (@scalar_output remainder, f64, $lanes:literal, $scalar:ident, ($x:ident, $y:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| unsafe {
+            libm::remainder($x[lane], $y[lane])
+        })))
+    };
+    (@scalar_output lgamma, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
+            $kind::$scalar($x[lane]).0
+        })))
+    };
     (@scalar_output sincos, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident)) => {{
         let mut sin = [0.0; $lanes];
         let mut cos = [0.0; $lanes];
@@ -91,10 +118,16 @@ benchmark!(fract, (x), fract, -16.0, 16.0);
 benchmark!(floor, (x), floor, -16.0, 16.0);
 benchmark!(ceil, (x), ceil, -16.0, 16.0);
 benchmark!(round, (x), round, -16.0, 16.0);
+benchmark!(fmod, (x, y), fmod, -16.0, 16.0);
+benchmark!(remainder, (x, y), remainder, -16.0, 16.0);
 benchmark!(sqrt, (x), sqrt, 0.125, 256.0);
+benchmark!(cbrt, (x), cbrt, -16.0, 16.0);
+benchmark!(hypot, (x, y), hypot, -16.0, 16.0);
 benchmark!(fma, (x, y, z), mul_add, -16.0, 16.0);
 benchmark!(exp, (x), exp, -10.0, 10.0);
 benchmark!(exp2, (x), exp2, -10.0, 10.0);
+benchmark!(expm1, (x), exp_m1, -10.0, 10.0);
+benchmark!(pow, (x, y), powf, 0.125, 4.0);
 benchmark!(log, (x), ln, 0.125, 256.0);
 benchmark!(log2, (x), log2, 0.125, 256.0);
 benchmark!(log10, (x), log10, 0.125, 256.0);
@@ -107,3 +140,13 @@ benchmark!(asin, (x), asin, -1.0, 1.0);
 benchmark!(acos, (x), acos, -1.0, 1.0);
 benchmark!(atan, (x), atan, -16.0, 16.0);
 benchmark!(atan2, (y, x), atan2, -16.0, 16.0);
+benchmark!(sinh, (x), sinh, -16.0, 16.0);
+benchmark!(cosh, (x), cosh, -16.0, 16.0);
+benchmark!(tanh, (x), tanh, -16.0, 16.0);
+benchmark!(asinh, (x), asinh, -16.0, 16.0);
+benchmark!(acosh, (x), acosh, 1.0, 16.0);
+benchmark!(atanh, (x), atanh, -0.99, 0.99);
+benchmark!(erf, (x), erf, -4.0, 4.0);
+benchmark!(erfc, (x), erfc, -4.0, 8.0);
+benchmark!(lgamma, (x), ln_gamma, -16.0, 16.0);
+benchmark!(tgamma, (x), gamma, -16.0, 16.0);

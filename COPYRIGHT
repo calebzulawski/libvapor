@@ -42,8 +42,8 @@ SPDX-License-Identifier: MIT
 ----------------------------------------------------------------------
 
 Sun Microsystems (via musl)
-Non-FMA logarithms, full-range sine and cosine, and trigonometric argument
-reduction and tables.
+Non-FMA logarithms, full-range sine and cosine, trigonometric reduction,
+and error-function rational approximations and tables.
 
 Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
 Copyright © 2005-2020 Rich Felker, et al.
@@ -74,8 +74,9 @@ SPDX-License-Identifier: MIT AND BSD-2-Clause
 ----------------------------------------------------------------------
 
 SLEEF
-Polynomials for non-FMA exp, exp2, sin and cos, and split ln(2) and pi
-constants used in non-FMA argument reduction.
+Non-FMA exponential and trigonometric polynomials and reduction constants;
+expm1, cube root, power, gamma, hypot, sinh, cosh, tanh, remainders,
+and shared compensated arithmetic.
 
 Copyright Naoki Shibata and contributors 2010 - 2025.
 SPDX-License-Identifier: MIT AND BSL-1.0

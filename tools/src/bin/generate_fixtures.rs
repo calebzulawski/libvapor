@@ -1,5 +1,204 @@
-use libvapor_tools::{oracle, serialization};
+use libvapor_tools::{oracle, serialization, Width};
 use std::path::PathBuf;
+#[path = "../../../src/gamma/zeros.rs"]
+#[allow(dead_code)]
+mod gamma_zeros;
+
+const NEW_OPERATIONS: &[&str] = &[
+    "fmod",
+    "remainder",
+    "cbrt",
+    "hypot",
+    "expm1",
+    "pow",
+    "sinh",
+    "cosh",
+    "tanh",
+    "asinh",
+    "acosh",
+    "atanh",
+    "erf",
+    "erfc",
+    "lgamma",
+    "tgamma",
+];
+
+fn new_inputs(width: Width, op: &str) -> Vec<[u64; 3]> {
+    let minimum = match width {
+        Width::F32 => f32::MIN_POSITIVE as f64,
+        Width::F64 => f64::MIN_POSITIVE,
+    };
+    let maximum = match width {
+        Width::F32 => f32::MAX as f64,
+        Width::F64 => f64::MAX,
+    };
+    let values = [
+        -maximum,
+        -minimum,
+        -0.0,
+        0.0,
+        minimum,
+        maximum,
+        f64::NEG_INFINITY,
+        f64::INFINITY,
+        f64::NAN,
+        -185.0,
+        -180.0,
+        -170.5,
+        -16.0,
+        -7.0,
+        -3.0,
+        -2.747682646727412,
+        f64::from_bits(0xc005fbbe9738207d),
+        -2.4570247382208006,
+        -2.0,
+        -1.5,
+        -1.0,
+        -0.5,
+        0.5,
+        0.84375,
+        1.0,
+        1.1,
+        1.25,
+        2.0,
+        2.2,
+        2.3,
+        2.5,
+        2.857142857142857,
+        4.2,
+        f64::from_bits(0x4011f6d82f48ffce),
+        f32::from_bits(0x41089b48) as f64,
+        6.0,
+        7.0,
+        19.0,
+        20.0,
+        27.3,
+        28.0,
+        37.5,
+        88.72283905206835,
+        89.41598629223294,
+        171.6243769563027,
+        f64::from_bits(0x406b5d688f4bffff),
+        709.782712893384,
+        710.4758600739439,
+    ];
+    let mut inputs = Vec::new();
+    if op == "pow" {
+        // Exercise the compensated logarithm's interval boundaries with
+        // exponents large enough to amplify reduction errors, including
+        // bases adjacent to one and outputs near underflow and overflow.
+        let targets: &[f64] = match width {
+            Width::F32 => &[-103.0, -87.0, -0.35, 0.35, 88.0],
+            Width::F64 => &[-744.0, -708.0, -0.35, 0.35, 709.0],
+        };
+        for i in 0..=96 {
+            let center = width.bits(0.75 + i as f64 / 128.0);
+            for offset in [-1, 0, 1] {
+                let bits = match width {
+                    Width::F32 => (center as u32).wrapping_add_signed(offset) as u64,
+                    Width::F64 => center.wrapping_add_signed(offset as i64),
+                };
+                let x = width.value(bits);
+                if x != 1.0 {
+                    for &target in targets {
+                        inputs.push([bits, width.bits(target / x.ln()), 0]);
+                    }
+                }
+            }
+        }
+    }
+    if matches!(op, "fmod" | "remainder") {
+        // A rounded division can land on an integer or half-integer boundary.
+        for bits in 1..=32 {
+            let y = match width {
+                Width::F32 => f32::from_bits(0x3f800000 + bits) as f64,
+                Width::F64 => f64::from_bits(0x3ff0000000000000 + bits as u64),
+            };
+            let limit = match width {
+                Width::F32 => 4194303.0,
+                Width::F64 => 1125899906842623.0,
+            };
+            for q in [1.0, 1.5, 2.0, 2.5, 3.0, 5.0, 65535.0, limit] {
+                let x = width.bits(y * q);
+                for offset in [-1, 0, 1] {
+                    let x = match width {
+                        Width::F32 => (x as u32).wrapping_add_signed(offset) as u64,
+                        Width::F64 => x.wrapping_add_signed(offset as i64),
+                    };
+                    inputs.push([x, width.bits(y), 0]);
+                }
+            }
+        }
+    }
+    if op == "lgamma" {
+        for zero in gamma_zeros::ZEROS {
+            for delta in [-zero.radius, 0.0, zero.radius] {
+                let bits = width.bits(zero.center + delta);
+                for offset in -8..=8 {
+                    let bits = match width {
+                        Width::F32 => (bits as u32).wrapping_add_signed(offset) as u64,
+                        Width::F64 => bits.wrapping_add_signed(offset as i64),
+                    };
+                    inputs.push([bits, 0, 0]);
+                }
+            }
+        }
+    }
+    for value in values {
+        let bits = width.bits(value);
+        for offset in [-1, 0, 1] {
+            let bits = match width {
+                Width::F32 => (bits as u32).wrapping_add_signed(offset) as u64,
+                Width::F64 => bits.wrapping_add_signed(offset as i64),
+            };
+            if matches!(op, "pow" | "hypot" | "fmod" | "remainder") {
+                for y in [
+                    -maximum,
+                    -3.0,
+                    -0.5,
+                    -0.0,
+                    0.0,
+                    minimum,
+                    0.5,
+                    1.0,
+                    2.0,
+                    3.0,
+                    maximum,
+                    f64::INFINITY,
+                    f64::NAN,
+                ] {
+                    inputs.push([bits, width.bits(y), 0]);
+                }
+                inputs.push([bits, 1, 0]);
+                inputs.push([bits, 3, 0]);
+            } else {
+                inputs.push([bits, 0, 0]);
+            }
+        }
+    }
+    let mut state = 0x9e3779b97f4a7c15_u64;
+    for i in 0..256 {
+        let mut sample = || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            if i % 2 == 0 {
+                width.bits((state >> 11) as f64 / (1_u64 << 53) as f64 * 32.0 - 16.0)
+            } else {
+                match width {
+                    Width::F32 => state as u32 as u64,
+                    Width::F64 => state,
+                }
+            }
+        };
+        let x = sample();
+        let y = if matches!(op, "pow" | "hypot" | "fmod" | "remainder") {
+            sample()
+        } else {
+            0
+        };
+        inputs.push([x, y, 0]);
+    }
+    inputs
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Keep the fixed inputs and their lane order. Fresh input sampling belongs
@@ -9,6 +208,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(serialization::FIXTURE_PATH));
     let mut groups = serialization::load(serialization::FIXTURE_PATH)?;
+    for width in [Width::F32, Width::F64] {
+        for &op in NEW_OPERATIONS {
+            if let Some(group) = groups
+                .iter_mut()
+                .find(|group| group.width == width && group.op == op)
+            {
+                for input in new_inputs(width, op) {
+                    if !group.cases.iter().any(|case| case.input == input) {
+                        group.cases.push(oracle::case(width, op, input));
+                    }
+                }
+            } else {
+                groups.push(serialization::Fixtures {
+                    width,
+                    op: op.into(),
+                    cases: new_inputs(width, op)
+                        .into_iter()
+                        .map(|input| oracle::case(width, op, input))
+                        .collect(),
+                });
+            }
+        }
+    }
     for group in &mut groups {
         for case in &mut group.cases {
             *case = oracle::case(group.width, &group.op, case.input);

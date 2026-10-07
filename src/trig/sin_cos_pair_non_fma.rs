@@ -1,6 +1,7 @@
 /*
  * Derived from Arm optimized-routines math/aarch64/advsimd/v_sincosf_common.h;
  * pi/2 split: SLEEF src/common/misc.h, with changes.
+ * SPDX-License-Identifier: MIT AND BSL-1.0
  */
 
 /*

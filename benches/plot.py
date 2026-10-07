@@ -13,9 +13,12 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 OPERATIONS = [
-    "trunc", "fract", "floor", "ceil", "round", "sqrt", "fma",
-    "exp", "exp2", "log", "log2", "log10", "log1p",
+    "trunc", "fract", "floor", "ceil", "round", "fmod", "remainder",
+    "sqrt", "cbrt", "hypot", "fma",
+    "exp", "exp2", "expm1", "pow", "log", "log2", "log10", "log1p",
     "sin", "cos", "sincos", "tan", "asin", "acos", "atan", "atan2",
+    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
+    "erf", "erfc", "lgamma", "tgamma",
 ]
 COLORS = ["#4477AA", "#66CCEE", "#228833", "#CCBB44"]
 KINDS = ["f32", "f64"]

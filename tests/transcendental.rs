@@ -26,8 +26,14 @@ macro_rules! transcendental_tests {
 }
 
 transcendental_tests! {
+    fmod(x, y) => |v| [v];
+    remainder(x, y) => |v| [v];
+    cbrt(x) => |v| [v];
+    hypot(x, y) => |v| [v];
     exp(x) => |v| [v];
     exp2(x) => |v| [v];
+    expm1(x) => |v| [v];
+    pow(x, y) => |v| [v];
     log(x) => |v| [v];
     log2(x) => |v| [v];
     log10(x) => |v| [v];
@@ -36,8 +42,18 @@ transcendental_tests! {
     cos(x) => |v| [v];
     sincos(x) => |(s, c)| [s, c];
     tan(x) => |v| [v];
-    atan(x) => |v| [v];
-    atan2(y, x) => |v| [v];
     asin(x) => |v| [v];
     acos(x) => |v| [v];
+    atan(x) => |v| [v];
+    atan2(y, x) => |v| [v];
+    sinh(x) => |v| [v];
+    cosh(x) => |v| [v];
+    tanh(x) => |v| [v];
+    asinh(x) => |v| [v];
+    acosh(x) => |v| [v];
+    atanh(x) => |v| [v];
+    erf(x) => |v| [v];
+    erfc(x) => |v| [v];
+    lgamma(x) => |v| [v];
+    tgamma(x) => |v| [v];
 }

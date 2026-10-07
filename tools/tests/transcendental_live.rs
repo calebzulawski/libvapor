@@ -31,7 +31,8 @@ fn input_strategy(width: Width, op: &str) -> BoxedStrategy<[u64; 3]> {
     let all = prop_oneof![all, boundaries];
     // Give useful finite inputs as much weight as the general float strategy.
     let (low, high) = match op {
-        "asin" | "acos" => (-1.0, 1.0),
+        "asin" | "acos" | "atanh" => (-1.0, 1.0),
+        "acosh" => (1.0, 256.0),
         "exp" if width == Width::F32 => (-104.0, 89.0),
         "exp" => (-746.0, 710.0),
         "exp2" if width == Width::F32 => (-151.0, 129.0),
@@ -42,7 +43,7 @@ fn input_strategy(width: Width, op: &str) -> BoxedStrategy<[u64; 3]> {
     };
     let ordinary = (low..high).prop_map(move |x| width.bits(x));
     let value = prop_oneof![all, ordinary];
-    if op == "atan2" {
+    if matches!(op, "atan2" | "hypot" | "pow" | "fmod" | "remainder") {
         (value.clone(), value).prop_map(|(y, x)| [y, x, 0]).boxed()
     } else {
         value.prop_map(|x| [x, 0, 0]).boxed()
@@ -89,8 +90,14 @@ macro_rules! transcendental_tests {
 }
 
 transcendental_tests! {
+    fmod(x, y) => |v| [v];
+    remainder(x, y) => |v| [v];
+    cbrt(x) => |v| [v];
+    hypot(x, y) => |v| [v];
     exp(x) => |v| [v];
     exp2(x) => |v| [v];
+    expm1(x) => |v| [v];
+    pow(x, y) => |v| [v];
     log(x) => |v| [v];
     log2(x) => |v| [v];
     log10(x) => |v| [v];
@@ -99,8 +106,18 @@ transcendental_tests! {
     cos(x) => |v| [v];
     sincos(x) => |(s, c)| [s, c];
     tan(x) => |v| [v];
-    atan(x) => |v| [v];
-    atan2(y, x) => |v| [v];
     asin(x) => |v| [v];
     acos(x) => |v| [v];
+    atan(x) => |v| [v];
+    atan2(y, x) => |v| [v];
+    sinh(x) => |v| [v];
+    cosh(x) => |v| [v];
+    tanh(x) => |v| [v];
+    asinh(x) => |v| [v];
+    acosh(x) => |v| [v];
+    atanh(x) => |v| [v];
+    erf(x) => |v| [v];
+    erfc(x) => |v| [v];
+    lgamma(x) => |v| [v];
+    tgamma(x) => |v| [v];
 }

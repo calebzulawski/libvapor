@@ -24,6 +24,20 @@ test = false
 bench = false
 required-features = ["oracle"]
 
+[[bin]]
+name = "generate-compensated-log"
+path = "src/bin/generate_compensated_log.rs"
+test = false
+bench = false
+required-features = ["oracle"]
+
+[[bin]]
+name = "generate-lgamma-zeros"
+path = "src/bin/generate_lgamma_zeros.rs"
+test = false
+bench = false
+required-features = ["oracle"]
+
 [[test]]
 name = "transcendental_live"
 required-features = ["oracle"]
