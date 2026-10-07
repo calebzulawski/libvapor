@@ -1,5 +1,6 @@
 /*
- * Derived from Arm optimized-routines math/aarch64/advsimd/log.c and log2.c, with changes.
+ * Range reduction adapted from Arm optimized-routines math/aarch64/advsimd/log.c
+ * and log2.c, with changes.
  */
 
 /*
@@ -30,8 +31,7 @@
  */
 
 /*
- * Derived from musl src/math/log1p.c and log2.c, with changes.
- * Base conversion: the fdlibm log2.c implementation in musl 1.1.19.
+ * Split ln(2) constants derived from musl src/math/log1p.c.
  * SPDX-License-Identifier: MIT AND SunPro
  */
 
@@ -57,55 +57,55 @@
  * ====================================================
  */
 
-// Non-FMA adaptation of the existing Arm table kernels.
-// Split table centers make the small-interval reduction accurate without FMA.
+// Non-FMA adaptation of the Arm table reduction. Dyadic centers make the
+// subtraction exact without a low center part, halving the lookup row size.
 #[path = "table_non_fma/centers.rs"]
 mod centers;
+#[path = "table_non_fma/params.rs"]
+mod params;
 
-use super::table_fma::{INVC, LOG2_CENTER, LOG2_POLY, LOG_CENTER, LOG_POLY};
 use crate::log::{data::*, reduction};
-use centers::*;
+use centers::{LOG2_TABLE, LOG_TABLE};
 use core::simd::prelude::*;
-
-// Interleave each center with its reciprocal and logarithm so every lane
-// loads one table row. Build it at compile time from the shared Arm data.
-const fn table<const BASE2: bool>() -> [[f64; 4]; 128] {
-    let mut rows = [[0.0; 4]; 128];
-    let mut i = 0;
-    while i < 128 {
-        rows[i] = [
-            CENTER_HI[i],
-            CENTER_LO[i],
-            INVC[i],
-            if BASE2 { LOG2_CENTER[i] } else { LOG_CENTER[i] },
-        ];
-        i += 1;
-    }
-    rows
-}
+use params::{INDEX_SHIFT, OFFSET, TABLE_SIZE};
 
 #[inline]
 fn kernel<const N: usize, const BASE2: bool>(bits: Simd<u64, N>) -> Simd<f64, N> {
-    let u = bits - Simd::splat(0x3fe6900900000000);
+    let off = Simd::splat(OFFSET);
+    // Round the table index before extracting the exponent. A carry at the
+    // upper endpoint advances k and halves z, keeping the index in range.
+    let u = bits - off + Simd::splat(1_u64 << (INDEX_SHIFT - 1));
     let k = ((u >> 32).cast::<i32>() >> 20).cast::<f64>();
     let z = Simd::<f64, N>::from_bits(bits - (u & Simd::splat(0xfff0000000000000)));
-    let index = ((u >> 45) & Simd::splat(127)).cast::<usize>().to_array();
-    let table = &const { table::<BASE2>() };
-    let rows = index.map(|i| table[i]);
-    let get = |field: usize| Simd::from_array(core::array::from_fn(|lane| rows[lane][field]));
-    // z and CENTER_HI are within a factor of two, so the first subtraction
-    // is exact. CENTER_LO accounts for the rounding of 1/invc.
-    let r = ((z - get(0)) - get(1)) * get(2);
+    let index = (u >> INDEX_SHIFT) & Simd::splat(TABLE_SIZE as u64 - 1);
+    let center = Simd::<f64, N>::from_bits(off + (index << INDEX_SHIFT));
+    let table = if BASE2 { &LOG2_TABLE } else { &LOG_TABLE };
+    let rows = index.cast::<usize>().to_array().map(|i| table[i]);
+    let invc = Simd::from_array(core::array::from_fn(|lane| rows[lane][0]));
+    let logc = Simd::from_array(core::array::from_fn(|lane| rows[lane][1]));
+    // z and center are within a factor of two, so z - center is exact.
+    // The center at one also avoids cancellation for inputs near one.
+    let r = (z - center) * invc;
     let r2 = r * r;
-    let coefficients = if BASE2 { LOG2_POLY } else { LOG_POLY };
-    let c = |i: usize| Simd::splat(coefficients[i]);
-    let p = (c(0) + r * c(1)) + r2 * ((c(2) + r * c(3)) + r2 * c(4));
-    let hi = if BASE2 {
-        k + (get(3) + r * Simd::splat(core::f64::consts::LOG2_E))
+    // Taylor series through r^7. Here |r| <= 1/256, so the omitted
+    // remainder is below 2^-66. Scale coefficients before evaluation
+    // for log2 rather than converting the completed logarithm.
+    let coefficients = [-0.5, 1.0 / 3.0, -0.25, 0.2, -1.0 / 6.0, 1.0 / 7.0];
+    let c = coefficients.map(|c| {
+        Simd::splat(if BASE2 {
+            c * core::f64::consts::LOG2_E
+        } else {
+            c
+        })
+    });
+    let p = (c[0] + r * c[1]) + r2 * ((c[2] + r * c[3]) + r2 * (c[4] + r * c[5]));
+    let lo = r2 * p;
+    if BASE2 {
+        k + (logc + (r * Simd::splat(core::f64::consts::LOG2_E) + lo))
     } else {
-        k * Simd::splat(SERIES_LN2_HI_F64) + (get(3) + (r + k * Simd::splat(SERIES_LN2_LO_F64)))
-    };
-    hi + r2 * p
+        k * Simd::splat(SERIES_LN2_HI_F64)
+            + (logc + (r + (lo + k * Simd::splat(SERIES_LN2_LO_F64))))
+    }
 }
 
 #[cold]

@@ -15,7 +15,21 @@ fn input_strategy(width: Width, op: &str) -> BoxedStrategy<[u64; 3]> {
             .prop_map(f64::to_bits)
             .boxed(),
     };
-    // Give useful finite inputs as much weight as the full float space.
+    // Random sampling rarely hits powers of two or table interval edges.
+    let fraction_bits = match width {
+        Width::F32 => f32::MANTISSA_DIGITS - 1,
+        Width::F64 => f64::MANTISSA_DIGITS - 1,
+    };
+    let boundaries =
+        (any::<u64>(), 0..=fraction_bits, -1_i64..=1).prop_map(move |(bits, clear, offset)| {
+            let bits = (bits & !((1_u64 << clear) - 1)).wrapping_add_signed(offset);
+            match width {
+                Width::F32 => bits as u32 as u64,
+                Width::F64 => bits,
+            }
+        });
+    let all = prop_oneof![all, boundaries];
+    // Give useful finite inputs as much weight as the general float strategy.
     let (low, high) = match op {
         "asin" | "acos" => (-1.0, 1.0),
         "exp" if width == Width::F32 => (-104.0, 89.0),
@@ -58,10 +72,6 @@ macro_rules! transcendental_tests {
                     check::<64>(width, cases);
                 }
                 for width in [Width::F32, Width::F64] {
-                    let boundaries = log_boundary_cases(width, stringify!($op));
-                    if !boundaries.is_empty() {
-                        check_lanes(width, &boundaries);
-                    }
                     let lanes = if width == Width::F32 { 8 } else { 4 };
                     let strategy = proptest::collection::vec(input_strategy(width, stringify!($op)), lanes);
                     let mut runner = TestRunner::new(Config::with_source_file(file!()));
@@ -93,44 +103,4 @@ transcendental_tests! {
     atan2(y, x) => |v| [v];
     asin(x) => |v| [v];
     acos(x) => |v| [v];
-}
-
-fn log_boundary_cases(width: Width, op: &str) -> Vec<Case> {
-    if width != Width::F64 || !matches!(op, "log" | "log2" | "log1p") {
-        return Vec::new();
-    }
-    // Sweep adjacent floats at mantissa boundaries, including the reduction
-    // interval endpoints, values near one, and the extreme normal exponents.
-    let mut input = Vec::new();
-    for exponent in [1_u64, 512, 1022, 1023, 1024, 1536, 2046] {
-        for fraction in 0..=256_u64 {
-            let bits = (exponent << 52) + (fraction << 44);
-            input.extend([bits - 1, bits, bits + 1]);
-        }
-        // The table reduction shifts its interval relative to powers of two.
-        for index in 0..=128_u64 {
-            let bits = (exponent << 52) + 0x0006900900000000 + (index << 45);
-            input.extend([bits - 1, bits, bits + 1]);
-        }
-    }
-    for bit in 0..52 {
-        input.extend([(1_u64 << bit) - 1, 1_u64 << bit, (1_u64 << bit) + 1]);
-    }
-    input.extend([0, 1_u64 << 63, f64::INFINITY.to_bits(), f64::NAN.to_bits()]);
-    // Values on both sides of log1p's domain and tiny-input boundary.
-    input.extend(
-        [
-            -1.0_f64,
-            (-1.0_f64).next_up(),
-            (-1.0_f64).next_down(),
-            1.0e-16,
-            -1.0e-16,
-        ]
-        .map(f64::to_bits),
-    );
-
-    input
-        .into_iter()
-        .map(|bits| oracle::case(width, op, [bits, 0, 0]))
-        .collect()
 }

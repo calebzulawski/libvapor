@@ -12,7 +12,7 @@ pub(crate) mod table_non_fma;
 
 use core::simd::Simd;
 
-// The split-center table beats the table-free method on baseline x86 and Wasm.
+// The table is faster than the table-free version on baseline x86 and Wasm.
 // Keep other targets on their existing implementations until benchmarked.
 const USE_TABLE_NON_FMA_F64: bool = cfg!(any(
     all(
