@@ -32,7 +32,7 @@
 use core::simd::prelude::*;
 
 macro_rules! hypot {
-    ($name:ident, $kind:ident, $sqrt:ident) => {
+    ($name:ident, $kind:ident, $sqrt:ident, $low:expr, $high:expr) => {
         /// Computes sqrt(x*x+y*y) without intermediate overflow or underflow.
         #[inline]
         pub fn $name<const N: usize>(x: Simd<$kind, N>, y: Simd<$kind, N>) -> Simd<$kind, N> {
@@ -40,16 +40,35 @@ macro_rules! hypot {
             let ay = y.abs();
             let hi = ax.simd_max(ay);
             let lo = ax.simd_min(ay);
-            let ratio = lo / hi;
-            let result = hi * crate::$sqrt(Simd::splat(1.0) + ratio * ratio);
+            // In this interval the larger square is normal and their sum
+            // cannot overflow. Avoid the division and final multiplication.
+            let ordinary = hi.simd_ge(Simd::splat($low)) & hi.simd_lt(Simd::splat($high));
+            let result = if ordinary.all() {
+                crate::$sqrt(ax * ax + ay * ay)
+            } else {
+                let ratio = lo / hi;
+                hi * crate::$sqrt(Simd::splat(1.0) + ratio * ratio)
+            };
             let result = lo.simd_eq(Simd::splat(0.0)).select(hi, result);
             let result = (x.is_nan() | y.is_nan()).select(x + y, result);
             (ax.is_infinite() | ay.is_infinite()).select(Simd::splat($kind::INFINITY), result)
         }
     };
 }
-hypot!(hypot_f32, f32, sqrt_f32);
-hypot!(hypot_f64, f64, sqrt_f64);
+hypot!(
+    hypot_f32,
+    f32,
+    sqrt_f32,
+    f32::from_bits(64 << 23),
+    f32::from_bits(190 << 23)
+);
+hypot!(
+    hypot_f64,
+    f64,
+    sqrt_f64,
+    f64::from_bits(512 << 52),
+    f64::from_bits(1534 << 52)
+);
 
 #[cfg(test)]
 mod tests {

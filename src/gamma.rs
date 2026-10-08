@@ -40,8 +40,8 @@ fn sinpi<const N: usize>(a: Simd<f64, N>) -> Dd<N> {
     let ax = a.abs();
     let d = ax - crate::floor_f64(ax * Simd::splat(0.5)) * Simd::splat(2.0);
     let u = d * Simd::splat(4.0);
-    let q = (u.cast::<i64>() + Simd::splat(1)) & Simd::splat(!1);
-    let cosine = (q & Simd::splat(2)).simd_ne(Simd::splat(0));
+    let q = (u.cast::<i32>() + Simd::splat(1)) & Simd::splat(!1);
+    let cosine = (q & Simd::splat(2)).simd_ne(Simd::splat(0)).cast::<i64>();
     let t = u - q.cast::<f64>();
     let s2 = Dd::product(t, t);
     let s = t * t;
@@ -90,13 +90,14 @@ fn sinpi<const N: usize>(a: Simd<f64, N>) -> Dd<N> {
     ));
     let p = p.mul(Dd::select(cosine, s2, Dd::from(t)));
     let p = Dd::select(cosine, p.add_float(Simd::splat(1.0)), p);
-    let negative = (q & Simd::splat(4)).simd_ne(Simd::splat(0)) ^ a.is_sign_negative();
+    let negative =
+        (q & Simd::splat(4)).simd_ne(Simd::splat(0)).cast::<i64>() ^ a.is_sign_negative();
     Dd::select(negative, p.neg(), p)
 }
 
-/// Return log(|Gamma(a)|) and the sign of Gamma(a), for finite non-poles.
+/// Return the compensated exponent and signed multiplier, for finite non-poles.
 #[inline]
-fn kernel<const N: usize>(a: Simd<f64, N>) -> (Dd<N>, Mask<i64, N>) {
+fn kernel<const N: usize>(a: Simd<f64, N>) -> (Dd<N>, Dd<N>) {
     let tiny = a.abs().simd_lt(Simd::splat(1.0e-306));
     let reflect = a.simd_lt(Simd::splat(0.5));
     let mut x = Dd::select(reflect, Dd::splat(1.0, 0.0).add_float(-a), Dd::from(a));
@@ -122,10 +123,16 @@ fn kernel<const N: usize>(a: Simd<f64, N>) -> (Dd<N>, Mask<i64, N>) {
             near_one.select(Simd::splat(c[1]), Simd::splat(c[2])),
         )
     };
-    let mut u = coefficient(data::COEFFICIENTS[0]);
-    for &c in &data::COEFFICIENTS[1..] {
-        u = madd(u, t, coefficient(c));
+    let t2 = t * t;
+    let mut even = coefficient(data::COEFFICIENTS[0]);
+    let mut odd = coefficient(data::COEFFICIENTS[1]);
+    for i in (2..data::COEFFICIENTS.len()).step_by(2) {
+        even = madd(even, t2, coefficient(data::COEFFICIENTS[i]));
+        if i + 1 < data::COEFFICIENTS.len() {
+            odd = madd(odd, t2, coefficient(data::COEFFICIENTS[i + 1]));
+        }
     }
+    let u = madd(odd, t, even);
     let stirling = x
         .add_float(Simd::splat(-0.5))
         .mul(log_dd(x))
@@ -182,17 +189,21 @@ fn kernel<const N: usize>(a: Simd<f64, N>) -> (Dd<N>, Mask<i64, N>) {
             ratio,
         );
     }
-    let ratio = ratio.normalize();
-    let negative = ratio.hi.is_sign_negative();
-    let magnitude = Dd::select(negative, ratio.neg(), ratio);
-    (logarithm.add(log_dd(magnitude)).normalize(), negative)
+    (logarithm, ratio.normalize())
 }
 
 #[inline]
 fn regular<const N: usize>(x: Simd<f64, N>) -> Mask<i64, N> {
-    x.is_finite()
-        & x.simd_ne(Simd::splat(0.0))
-        & !(x.simd_lt(Simd::splat(0.0)) & crate::trunc_f64(x).simd_eq(x))
+    // Classification needs only equality to an integer, not truncation.
+    // Adding a signed 2^52 rounds smaller magnitudes to integer spacing.
+    let integer =
+        if crate::backend::use_hardware_round_f64::<N>(crate::backend::RoundingMode::Directed) {
+            crate::trunc_f64(x).simd_eq(x)
+        } else {
+            let shift = Simd::splat(4503599627370496.0).copysign(x);
+            ((x + shift) - shift).simd_eq(x) | x.abs().simd_ge(Simd::splat(4503599627370496.0))
+        };
+    x.is_finite() & x.simd_ne(Simd::splat(0.0)) & !(x.simd_lt(Simd::splat(0.0)) & integer)
 }
 
 #[cold]
@@ -220,9 +231,14 @@ fn near_zero<const N: usize>(x: Simd<f64, N>, mut value: Simd<f64, N>) -> Simd<f
 #[inline]
 fn zero_series<const N: usize>(x: Simd<f64, N>, zero: &zeros::Zero) -> Simd<f64, N> {
     let t = (x - Simd::splat(zero.center)) / Simd::splat(zero.scale);
-    let last = zero.coefficients[20];
-    let mut p = Dd::splat(last[0], last[1]);
-    for c in zero.coefficients[..20].iter().rev() {
+    // Higher terms are suppressed by |t| < 1/16. Only the last four
+    // coefficients need compensation for cancellation near a root.
+    let mut high = Simd::splat(zero.coefficients[20][0]);
+    for c in zero.coefficients[4..20].iter().rev() {
+        high = madd(high, t, Simd::splat(c[0]));
+    }
+    let mut p = Dd::from(high);
+    for c in zero.coefficients[..4].iter().rev() {
         p = p.mul_float(t).add(Dd::splat(c[0], c[1])).normalize();
     }
     p.value()
@@ -232,9 +248,21 @@ fn zero_series<const N: usize>(x: Simd<f64, N>, zero: &zeros::Zero) -> Simd<f64,
 #[inline]
 pub fn tgamma_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     let finite = regular(x);
-    let (logarithm, negative) = kernel(finite.select(x, Simd::splat(1.0)));
-    let magnitude = exp_value(logarithm);
-    let result = negative.select(-magnitude, magnitude);
+    let (logarithm, ratio) = kernel(finite.select(x, Simd::splat(1.0)));
+    // Unfused compensation has more temporaries. Combining the logarithms
+    // keeps the ratio out of the exponential's register budget on that path,
+    // and avoids intermediate overflow or underflow at extreme exponents.
+    let result = if !crate::backend::use_hardware_fma_f64::<N>()
+        || !logarithm.hi.abs().simd_lt(Simd::splat(700.0)).all()
+    {
+        let negative = ratio.hi.is_sign_negative();
+        let magnitude = Dd::select(negative, ratio.neg(), ratio);
+        let value = exp_value(logarithm.add(log_dd(magnitude)).normalize());
+        negative.select(-value, value)
+    } else {
+        let exponential = exp_value(logarithm);
+        madd(exponential, ratio.lo, exponential * ratio.hi)
+    };
     let result =
         (x.simd_gt(Simd::splat(0.0)) & result.is_nan()).select(Simd::splat(f64::INFINITY), result);
     let exceptional = x.simd_eq(Simd::splat(0.0)).select(
@@ -257,8 +285,9 @@ fn correct_f32_near_zero<const N: usize>(x: Simd<f64, N>, value: Simd<f64, N>) -
 #[inline]
 pub fn lgamma_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     let finite = regular(x);
-    let (logarithm, _) = kernel(finite.select(x, Simd::splat(1.0)));
-    let value = logarithm.value();
+    let (logarithm, ratio) = kernel(finite.select(x, Simd::splat(1.0)));
+    let magnitude = Dd::select(ratio.hi.is_sign_negative(), ratio.neg(), ratio);
+    let value = logarithm.add(log_dd(magnitude)).value();
     let value = value.is_nan().select(Simd::splat(f64::INFINITY), value);
     let value = if (x.simd_lt(Simd::splat(0.0)) & value.abs().simd_lt(Simd::splat(0.05))).any() {
         near_zero(x, value)

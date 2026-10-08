@@ -18,8 +18,9 @@ SPDX-License-Identifier: MIT
 Arm optimized-routines
 FMA exponential, logarithm, trigonometric and inverse trigonometric
 implementations, with non-FMA adaptations. Exponential tables and
-single-precision argument reduction. Full-range exponentials and some
-tables came through musl.
+single-precision argument reduction. Double-precision erf uses portable
+Taylor reduction at table centers. Full-range exponentials and some tables
+came through musl.
 
 Copyright (c) 1999-2022, Arm Limited.
 Copyright (c) 2017-2018, Arm Limited.

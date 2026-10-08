@@ -29,7 +29,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-use crate::precision::{frexp, madd, madd_f32, polynomial, scale};
+use crate::precision::{frexp, madd, madd_f32, polynomial};
 use core::simd::prelude::*;
 
 /// Computes the real cube root for each lane, including negative inputs.
@@ -37,6 +37,7 @@ use core::simd::prelude::*;
 pub fn cbrt_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     let regular = x.is_finite() & x.simd_ne(Simd::splat(0.0));
     let (m, e) = frexp(regular.select(x.abs(), Simd::splat(1.0)));
+    let e = e.cast::<i32>();
     let q = (e + Simd::splat(6144)) / Simd::splat(3);
     let rem = e + Simd::splat(6144) - q * Simd::splat(3);
     let factor = rem.simd_eq(Simd::splat(1)).select(
@@ -59,7 +60,10 @@ pub fn cbrt_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     r = r - (m * r2 * r2 - r) * Simd::splat(1.0 / 3.0);
     let y = m * r * r;
     let y = y - (Simd::splat(2.0 / 3.0) * y) * madd(y, r, Simd::splat(-1.0));
-    let y = scale(y * factor, q - Simd::splat(2048)).copysign(x);
+    // A cube root's exponent is always in the normal factor range.
+    let power =
+        Simd::<f64, N>::from_bits((q - Simd::splat(2048) + Simd::splat(1023)).cast::<u64>() << 52);
+    let y = ((y * factor) * power).copysign(x);
     regular.select(y, x)
 }
 

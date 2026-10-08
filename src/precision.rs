@@ -150,13 +150,20 @@ impl<const N: usize> Dd<N> {
     }
     #[inline]
     pub fn square(self) -> Self {
-        self.mul(self)
+        let p = Self::product(self.hi, self.hi);
+        Self::new(p.hi, madd(self.hi, self.lo + self.lo, p.lo))
     }
     #[inline]
     pub fn div(self, other: Self) -> Self {
         let q = self.hi / other.hi;
-        let r = self.sub(other.mul_float(q)).normalize();
-        Self::new(q, r.value() / other.hi)
+        let residual = if crate::backend::use_hardware_fma_f64::<N>() {
+            (-q).mul_add(other.hi, self.hi)
+        } else {
+            let p = Self::product(q, other.hi);
+            // The high subtraction is exact: q*other.hi is close to self.hi.
+            (self.hi - p.hi) - p.lo
+        };
+        Self::new(q, (residual + madd(-q, other.lo, self.lo)) / other.hi)
     }
 }
 
@@ -190,11 +197,20 @@ pub(crate) fn frexp<const N: usize>(x: Simd<f64, N>) -> (Simd<f64, N>, Simd<i64,
 
 #[inline]
 pub(crate) fn polynomial<const N: usize>(x: Simd<f64, N>, coefficients: &[f64]) -> Simd<f64, N> {
-    let mut p = Simd::splat(coefficients[0]);
-    for &c in &coefficients[1..] {
-        p = madd(p, x, Simd::splat(c));
+    let x2 = x * x;
+    let mut even = Simd::splat(coefficients[0]);
+    let mut odd = Simd::splat(coefficients[1]);
+    for i in (2..coefficients.len()).step_by(2) {
+        even = madd(even, x2, Simd::splat(coefficients[i]));
+        if i + 1 < coefficients.len() {
+            odd = madd(odd, x2, Simd::splat(coefficients[i + 1]));
+        }
     }
-    p
+    if coefficients.len() % 2 == 0 {
+        madd(even, x, odd)
+    } else {
+        madd(odd, x, even)
+    }
 }
 
 /// Extra-precision logarithm, including a small low input component.
@@ -242,24 +258,23 @@ fn log_table_dd<const N: usize>(x: Simd<f64, N>) -> Dd<N> {
     // The reciprocal has eight significant bits. Splitting the mantissa
     // makes both products exact without requiring an FMA or a division.
     let high = Simd::<f64, N>::from_bits(m.to_bits() & Simd::splat(!((1_u64 << 27) - 1)));
-    let r = Dd::from(high * inverse - Simd::splat(1.0))
-        .add_float((m - high) * inverse)
-        .normalize();
+    // Both products are exact. If the low component is larger, these
+    // dyadic pieces sum exactly; otherwise fast normalization applies.
+    let r = Dd::new(high * inverse - Simd::splat(1.0), (m - high) * inverse).normalize();
     let r2 = r.square();
-    let p = polynomial(
-        r.hi,
-        &[
-            1.0 / 11.0,
-            -1.0 / 10.0,
-            1.0 / 9.0,
-            -1.0 / 8.0,
-            1.0 / 7.0,
-            -1.0 / 6.0,
-            1.0 / 5.0,
-            -1.0 / 4.0,
-            1.0 / 3.0,
-        ],
-    );
+    let mut p = Simd::splat(1.0 / 11.0);
+    for c in [
+        -1.0 / 10.0,
+        1.0 / 9.0,
+        -1.0 / 8.0,
+        1.0 / 7.0,
+        -1.0 / 6.0,
+        1.0 / 5.0,
+        -1.0 / 4.0,
+        1.0 / 3.0,
+    ] {
+        p = madd(p, r.hi, Simd::splat(c));
+    }
     let reduced = r
         .add(r2.scale(Simd::splat(-0.5)))
         .add_float((r.hi * r.hi * r.hi) * p);

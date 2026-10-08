@@ -121,3 +121,62 @@ transcendental_tests! {
     lgamma(x) => |v| [v];
     tgamma(x) => |v| [v];
 }
+
+#[test]
+fn erf_table_boundaries() {
+    // Check both sides of every rounded-center transition, including the
+    // first interval where relative error is most sensitive.
+    let mut cases = Vec::new();
+    for i in 0..=768 {
+        for center in [i as f64 / 128.0, (i as f64 + 0.5) / 128.0] {
+            for bits in [
+                center.to_bits().saturating_sub(1),
+                center.to_bits(),
+                center.to_bits() + 1,
+            ] {
+                for x in [f64::from_bits(bits), -f64::from_bits(bits)] {
+                    cases.push(oracle::case(Width::F64, "erf", [x.to_bits(), 0, 0]));
+                }
+            }
+        }
+    }
+    fn check<const N: usize>(cases: &[Case]) {
+        libvapor_tools::check_accuracy!(f64, F64, N, cases, vapor::erf_f64, (x) => |v| [v]);
+    }
+    check::<1>(&cases);
+    check::<3>(&cases);
+    check::<8>(&cases);
+    check::<64>(&cases);
+}
+
+#[test]
+fn gamma_exponential_range_boundaries() {
+    // The ordinary reconstruction multiplies an exponential by a signed
+    // ratio. Extremes must combine their logarithms before exponentiating.
+    for op in ["lgamma", "tgamma"] {
+        let mut cases = Vec::new();
+        for center in [
+            -200.5_f64,
+            -171.5,
+            -170.5,
+            -169.5,
+            169.0,
+            170.0,
+            171.0,
+            171.6243769563027,
+            172.0,
+            1.0e-306,
+        ] {
+            for bits in [center.to_bits() - 1, center.to_bits(), center.to_bits() + 1] {
+                cases.push(oracle::case(Width::F64, op, [bits, 0, 0]));
+            }
+        }
+        if op == "tgamma" {
+            libvapor_tools::check_accuracy!(f64, F64, 1, &cases, vapor::tgamma_f64, (x) => |v| [v]);
+            libvapor_tools::check_accuracy!(f64, F64, 8, &cases, vapor::tgamma_f64, (x) => |v| [v]);
+        } else {
+            libvapor_tools::check_accuracy!(f64, F64, 1, &cases, vapor::lgamma_f64, (x) => |v| [v]);
+            libvapor_tools::check_accuracy!(f64, F64, 8, &cases, vapor::lgamma_f64, (x) => |v| [v]);
+        }
+    }
+}

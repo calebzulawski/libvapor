@@ -48,3 +48,10 @@ path = "src/bin/generate_log_centers.rs"
 test = false
 bench = false
 required-features = ["oracle"]
+
+[[bin]]
+name = "generate-erf-table"
+path = "src/bin/generate_erf_table.rs"
+test = false
+bench = false
+required-features = ["oracle"]

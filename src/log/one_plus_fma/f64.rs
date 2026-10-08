@@ -53,30 +53,19 @@ const COEFF_F64: [f64; 19] = [
 
 #[inline]
 fn poly_f64<const N: usize>(m: Simd<f64, N>) -> Simd<f64, N> {
-    let c = COEFF_F64.map(Simd::splat);
-    let p0_0 = m.mul_add(c[1], c[0]);
-    let p0_1 = m.mul_add(c[3], c[2]);
-    let p0_2 = m.mul_add(c[5], c[4]);
-    let p0_3 = m.mul_add(c[7], c[6]);
-    let p0_4 = m.mul_add(c[9], c[8]);
-    let p0_5 = m.mul_add(c[11], c[10]);
-    let p0_6 = m.mul_add(c[13], c[12]);
-    let p0_7 = m.mul_add(c[15], c[14]);
-    let p0_8 = m.mul_add(c[17], c[16]);
+    // Two interleaved Horner chains keep few vectors live even when N
+    // spans several hardware registers.
+    let c = |index: usize| Simd::splat(COEFF_F64[index]);
     let m2 = m * m;
-    let p1_0 = m2.mul_add(p0_1, p0_0);
-    let p1_1 = m2.mul_add(p0_3, p0_2);
-    let p1_2 = m2.mul_add(p0_5, p0_4);
-    let p1_3 = m2.mul_add(p0_7, p0_6);
-    let p1_4 = m2.mul_add(c[18], p0_8);
-    let m4 = m2 * m2;
-    let p2_0 = m4.mul_add(p1_1, p1_0);
-    let p2_1 = m4.mul_add(p1_3, p1_2);
-    let m8 = m4 * m4;
-    let p3_0 = m8.mul_add(p2_1, p2_0);
-    let m16 = m8 * m8;
-    let p4_0 = m16.mul_add(p1_4, p3_0);
-    p4_0
+    let mut even = c(18);
+    let mut odd = c(17);
+    for i in (0..=16).rev().step_by(2) {
+        even = m2.mul_add(even, c(i));
+        if i > 0 {
+            odd = m2.mul_add(odd, c(i - 1));
+        }
+    }
+    m.mul_add(odd, even)
 }
 
 #[inline]

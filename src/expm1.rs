@@ -71,7 +71,7 @@ pub fn expm1_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     );
     let ret = q.simd_eq(Simd::splat(0.0)).select(
         u,
-        scale(Simd::splat(1.0) + u, q.cast::<i64>()) - Simd::splat(1.0),
+        scale(Simd::splat(1.0) + u, q.cast::<i32>().cast::<i64>()) - Simd::splat(1.0),
     );
     let ret = x.abs().simd_lt(Simd::splat(1.0e-16)).select(x, ret);
     let exceptional = x

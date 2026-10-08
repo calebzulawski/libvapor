@@ -12,6 +12,7 @@
  */
 
 mod data;
+mod table;
 use crate::precision::{exp_value, madd, madd_f32, Dd};
 use core::simd::prelude::*;
 use data::*;
@@ -83,19 +84,7 @@ fn complementary<const N: usize, const EXTRA_PRECISION: bool>(a: Simd<f64, N>) -
 /// Computes the error function for each lane.
 #[inline]
 pub fn erf_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
-    let ax = x.abs();
-    let small = ax.simd_lt(Simd::splat(0.84375));
-    let a = ax.simd_min(Simd::splat(0.84375));
-    let near = small_erf(a);
-    let value = if small.all() {
-        near
-    } else {
-        let far = Simd::splat(1.0)
-            - complementary::<N, false>(ax.simd_clamp(Simd::splat(0.84375), Simd::splat(6.0)));
-        let far = ax.simd_ge(Simd::splat(6.0)).select(Simd::splat(1.0), far);
-        small.select(near, far)
-    };
-    x.is_nan().select(x + x, value.copysign(x))
+    table::erf(x)
 }
 
 /// Computes 1-erf(x) for each lane, retaining accuracy in the positive tail.
