@@ -18,51 +18,43 @@ use super::super::data::*;
 use super::super::reduction::reduce_f64;
 use super::finish::finish;
 use core::simd::prelude::*;
-use simd_macros::vectorize;
 
-#[allow(unused_braces)]
 fn kernels_f64<const N: usize>(
     x: Simd<f64, N>,
     y: Simd<f64, N>,
     small: Mask<i64, N>,
 ) -> (Simd<f64, N>, Simd<f64, N>) {
-    vectorize!(N, {
-        let z = x * x;
-        let w = z * z;
-        let r = scalar!(SIN_POLY_F64[1])
-            + z * (scalar!(SIN_POLY_F64[2]) + z * scalar!(SIN_POLY_F64[3]))
-            + z * w * (scalar!(SIN_POLY_F64[4]) + z * scalar!(SIN_POLY_F64[5]));
-        let v = z * x;
-        let sin = if small {
-            x + v * (scalar!(SIN_POLY_F64[0]) + z * r)
-        } else {
-            x - ((z * (0.5 * y - v * r) - y) - v * scalar!(SIN_POLY_F64[0]))
-        };
+    let z = x * x;
+    let w = z * z;
+    let r = Simd::splat(SIN_POLY_F64[1])
+        + z * (Simd::splat(SIN_POLY_F64[2]) + z * Simd::splat(SIN_POLY_F64[3]))
+        + z * w * (Simd::splat(SIN_POLY_F64[4]) + z * Simd::splat(SIN_POLY_F64[5]));
+    let v = z * x;
+    let sin = small.select(
+        x + v * (Simd::splat(SIN_POLY_F64[0]) + z * r),
+        x - ((z * (Simd::splat(0.5) * y - v * r) - y) - v * Simd::splat(SIN_POLY_F64[0])),
+    );
 
-        let r = z
-            * (scalar!(COS_POLY_F64[0])
-                + z * (scalar!(COS_POLY_F64[1]) + z * scalar!(COS_POLY_F64[2])))
-            + w * w
-                * (scalar!(COS_POLY_F64[3])
-                    + z * (scalar!(COS_POLY_F64[4]) + z * scalar!(COS_POLY_F64[5])));
-        let hz = 0.5 * z;
-        let w = 1.0 - hz;
-        let cos = w + (((1.0 - w) - hz) + (z * r - x * y));
-        (sin, cos)
-    })
+    let r = z
+        * (Simd::splat(COS_POLY_F64[0])
+            + z * (Simd::splat(COS_POLY_F64[1]) + z * Simd::splat(COS_POLY_F64[2])))
+        + w * w
+            * (Simd::splat(COS_POLY_F64[3])
+                + z * (Simd::splat(COS_POLY_F64[4]) + z * Simd::splat(COS_POLY_F64[5])));
+    let hz = Simd::splat(0.5) * z;
+    let w = Simd::splat(1.0) - hz;
+    let cos = w + (((Simd::splat(1.0) - w) - hz) + (z * r - x * y));
+    (sin, cos)
 }
 
-#[allow(unused_braces)]
 /// Computes (sin(x), cos(x)) in radians for each lane with shared argument reduction,
 /// assuming round-to-nearest, ties-to-even.
 #[inline]
 pub(crate) fn full_range_sincos_f64<const N: usize>(
     x: Simd<f64, N>,
 ) -> (Simd<f64, N>, Simd<f64, N>) {
-    vectorize!(N, {
-        let ax = if x.is_finite() { x.abs() } else { 0.0 };
-        let reduced = reduce_f64(ax);
-        let (s, c) = kernels_f64(reduced.hi, reduced.lo, ax <= scalar!(PIO4));
-        finish(x, reduced.quadrant, s, c)
-    })
+    let ax = x.is_finite().select(x.abs(), Simd::splat(0.0));
+    let reduced = reduce_f64(ax);
+    let (s, c) = kernels_f64(reduced.hi, reduced.lo, ax.simd_le(Simd::splat(PIO4)));
+    finish(x, reduced.quadrant, s, c)
 }

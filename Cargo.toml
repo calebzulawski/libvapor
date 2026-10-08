@@ -16,9 +16,6 @@ name = "vapor"
 # Use software math implementations even when the target supports hardware math.
 force-soft = []
 
-[dependencies]
-simd-macros = { git = "https://github.com/calebzulawski/simd-macros" }
-
 [dev-dependencies]
 libvapor-tools = { path = "tools", default-features = false }
 paste = "1"

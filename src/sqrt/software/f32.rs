@@ -28,7 +28,6 @@
 
 use super::table::RSQRT_TAB;
 use core::simd::prelude::*;
-use simd_macros::vectorize;
 
 /* returns a*b*2^-32 - e, with error 0 <= e < 1.  */
 fn mul32<const N: usize>(a: Simd<u32, N>, b: Simd<u32, N>) -> Simd<u32, N> {
@@ -50,33 +49,29 @@ pub fn sqrt_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
 #[cold]
 #[inline(never)]
 fn sqrt_f32_general<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    vectorize!(N, {
-        if (x == scalar!(f32::INFINITY)) | (x == 0.0) {
-            x
-        } else if x.is_nan() | (x < 0.0) {
-            scalar!(f32::NAN)
-        } else {
-            let x1p23 = scalar!(f32::from_bits(0x4b000000));
-            let x = if x.is_subnormal() {
-                <f32>::from_bits((x * x1p23).to_bits() - (23u32 << 23))
-            } else {
-                x
-            };
+    (x.simd_eq(Simd::splat(f32::INFINITY)) | x.simd_eq(Simd::splat(0.0))).select(
+        x,
+        (x.is_nan() | x.simd_lt(Simd::splat(0.0))).select(Simd::splat(f32::NAN), {
+            let x1p23 = Simd::splat(f32::from_bits(0x4b000000));
+            let x = x.is_subnormal().select(
+                Simd::<f32, N>::from_bits((x * x1p23).to_bits() - (Simd::splat(23u32) << 23)),
+                x,
+            );
 
-            let even = x.to_bits() & 0x00800000 != 0;
-            let m = if even {
-                (x.to_bits() << 7) & 0x7fffffff
-            } else {
-                (x.to_bits() << 8) | 0x80000000
-            };
+            let even = (x.to_bits() & Simd::splat(0x00800000)).simd_ne(Simd::splat(0));
+            let m = even.select(
+                (x.to_bits() << 7) & Simd::splat(0x7fffffff),
+                (x.to_bits() << 8) | Simd::splat(0x80000000),
+            );
 
             let mut ey = x.to_bits() >> 1;
-            ey += 0x3f800000u32 >> 1;
-            ey &= 0x7f800000;
+            ey += Simd::splat(0x3f800000u32) >> 1;
+            ey &= Simd::splat(0x7f800000);
 
-            let three = 0xc0000000;
-            let i = (x.to_bits() >> 17) % 128;
-            let mut r = <u32>::gather_or(&RSQRT_TAB, i as usize, 0) << 16;
+            let three = Simd::splat(0xc0000000);
+            let i = (x.to_bits() >> 17) % Simd::splat(128);
+            let mut r =
+                Simd::<u32, N>::gather_or(&RSQRT_TAB, i.cast::<usize>(), Simd::splat(0)) << 16;
             let mut s = mul32(m, r);
             let mut d = mul32(s, r);
             let mut u = three - d;
@@ -85,60 +80,61 @@ fn sqrt_f32_general<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
             d = mul32(s, r);
             u = three - d;
             s = mul32(s, u);
-            s = (s - 1) >> 6;
+            s = (s - Simd::splat(1)) >> 6;
 
             let d0 = (m << 16) - s * s;
             let d1 = s - d0;
-            let d2 = d1 + s + 1;
+            let d2 = d1 + s + Simd::splat(1);
             s += d1 >> 31;
-            s &= 0x007fffff;
+            s &= Simd::splat(0x007fffff);
             s |= ey;
-            let y = <f32>::from_bits(s);
+            let y = Simd::<f32, N>::from_bits(s);
 
-            let mut tiny = if d2 == 0 { 0 } else { 0x01000000 };
-            tiny |= (d1 ^ d2) & 0x80000000;
-            y + <f32>::from_bits(tiny)
-        }
-    })
+            let mut tiny = d2
+                .simd_eq(Simd::splat(0))
+                .select(Simd::splat(0), Simd::splat(0x01000000));
+            tiny |= (d1 ^ d2) & Simd::splat(0x80000000);
+            y + Simd::<f32, N>::from_bits(tiny)
+        }),
+    )
 }
 
 #[inline]
 fn sqrt_f32_normal<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    vectorize!(N, {
-        let even = x.to_bits() & 0x00800000 != 0;
-        let m = if even {
-            (x.to_bits() << 7) & 0x7fffffff
-        } else {
-            (x.to_bits() << 8) | 0x80000000
-        };
+    let even = (x.to_bits() & Simd::splat(0x00800000)).simd_ne(Simd::splat(0));
+    let m = even.select(
+        (x.to_bits() << 7) & Simd::splat(0x7fffffff),
+        (x.to_bits() << 8) | Simd::splat(0x80000000),
+    );
 
-        let mut ey = x.to_bits() >> 1;
-        ey += 0x3f800000u32 >> 1;
-        ey &= 0x7f800000;
+    let mut ey = x.to_bits() >> 1;
+    ey += Simd::splat(0x3f800000u32) >> 1;
+    ey &= Simd::splat(0x7f800000);
 
-        let three = 0xc0000000;
-        let i = (x.to_bits() >> 17) % 128;
-        let mut r = <u32>::gather_or(&RSQRT_TAB, i as usize, 0) << 16;
-        let mut s = mul32(m, r);
-        let mut d = mul32(s, r);
-        let mut u = three - d;
-        r = mul32(r, u) << 1;
-        s = mul32(s, u) << 1;
-        d = mul32(s, r);
-        u = three - d;
-        s = mul32(s, u);
-        s = (s - 1) >> 6;
+    let three = Simd::splat(0xc0000000);
+    let i = (x.to_bits() >> 17) % Simd::splat(128);
+    let mut r = Simd::<u32, N>::gather_or(&RSQRT_TAB, i.cast::<usize>(), Simd::splat(0)) << 16;
+    let mut s = mul32(m, r);
+    let mut d = mul32(s, r);
+    let mut u = three - d;
+    r = mul32(r, u) << 1;
+    s = mul32(s, u) << 1;
+    d = mul32(s, r);
+    u = three - d;
+    s = mul32(s, u);
+    s = (s - Simd::splat(1)) >> 6;
 
-        let d0 = (m << 16) - s * s;
-        let d1 = s - d0;
-        let d2 = d1 + s + 1;
-        s += d1 >> 31;
-        s &= 0x007fffff;
-        s |= ey;
-        let y = <f32>::from_bits(s);
+    let d0 = (m << 16) - s * s;
+    let d1 = s - d0;
+    let d2 = d1 + s + Simd::splat(1);
+    s += d1 >> 31;
+    s &= Simd::splat(0x007fffff);
+    s |= ey;
+    let y = Simd::<f32, N>::from_bits(s);
 
-        let mut tiny = if d2 == 0 { 0 } else { 0x01000000 };
-        tiny |= (d1 ^ d2) & 0x80000000;
-        y + <f32>::from_bits(tiny)
-    })
+    let mut tiny = d2
+        .simd_eq(Simd::splat(0))
+        .select(Simd::splat(0), Simd::splat(0x01000000));
+    tiny |= (d1 ^ d2) & Simd::splat(0x80000000);
+    y + Simd::<f32, N>::from_bits(tiny)
 }

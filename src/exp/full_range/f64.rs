@@ -28,10 +28,7 @@
 
 use super::super::data::*;
 use core::simd::prelude::*;
-use simd_macros::vectorize;
 
-// vectorize! retains the braces of scalar if branches in select arguments.
-#[allow(unused_braces)]
 fn exp_scale_f64<const N: usize>(
     tmp: Simd<f64, N>,
     sbits: Simd<u64, N>,
@@ -40,52 +37,42 @@ fn exp_scale_f64<const N: usize>(
     scale_exponent: u64,
 ) -> Simd<f64, N> {
     if !large.any() {
-        return vectorize!(N, {
-            let scale = <f64>::from_bits(sbits);
-            scale + scale * tmp
-        });
+        let scale = Simd::<f64, N>::from_bits(sbits);
+        return scale + scale * tmp;
     }
 
-    vectorize!(N, {
-        let one_bits = scalar!(1.0f64.to_bits());
-        let positive = ki & 0x80000000 == 0;
-        let high = large & positive;
-        let low = large & !positive;
+    let one_bits = Simd::splat(1.0f64.to_bits());
+    let positive = (ki & Simd::splat(0x80000000)).simd_eq(Simd::splat(0));
+    let high = large & positive;
+    let low = large & !positive;
 
-        // Keep each inactive path at a valid scale before interpreting its bits
-        // as floating point, even when a vector mixes normal and extreme lanes.
-        let scale = <f64>::from_bits(if large { one_bits } else { sbits });
-        let normal_tmp = if large { 0.0 } else { tmp };
-        let normal_result = scale + scale * normal_tmp;
+    // Keep each inactive path at a valid scale before interpreting its bits
+    // as floating point, even when a vector mixes normal and extreme lanes.
+    let scale = Simd::<f64, N>::from_bits(large.select(one_bits, sbits));
+    let normal_tmp = large.select(Simd::splat(0.0), tmp);
+    let normal_result = scale + scale * normal_tmp;
 
-        // Bring an overflowing exponent back into range, then scale the result.
-        let high_bits = sbits - scalar!(scale_exponent << 52);
-        let scale = <f64>::from_bits(if high { high_bits } else { one_bits });
-        let high_tmp = if high { tmp } else { 0.0 };
-        let high_scale = scalar!(f64::from_bits((1023 + scale_exponent) << 52));
-        let high_result = high_scale * (scale + scale * high_tmp);
+    // Bring an overflowing exponent back into range, then scale the result.
+    let high_bits = sbits - Simd::splat(scale_exponent << 52);
+    let scale = Simd::<f64, N>::from_bits(high.select(high_bits, one_bits));
+    let high_tmp = high.select(tmp, Simd::splat(0.0));
+    let high_scale = Simd::splat(f64::from_bits((1023 + scale_exponent) << 52));
+    let high_result = high_scale * (scale + scale * high_tmp);
 
-        // Compute underflowing results in the normal range. Compensate the sum
-        // before scaling down so subnormal results do not suffer double rounding.
-        let low_bits = sbits + (1022u64 << 52);
-        let scale = <f64>::from_bits(if low { low_bits } else { one_bits });
-        let low_tmp = if low { tmp } else { 0.0 };
-        let y = scale + scale * low_tmp;
-        let lo = scale - y + scale * low_tmp;
-        let hi = 1.0 + y;
-        let lo = 1.0 - hi + y + lo;
-        let rounded = hi + lo - 1.0;
-        let y = if y < 1.0 { rounded } else { y };
-        let low_result = scalar!(f64::MIN_POSITIVE) * y;
+    // Compute underflowing results in the normal range. Compensate the sum
+    // before scaling down so subnormal results do not suffer double rounding.
+    let low_bits = sbits + (Simd::splat(1022u64) << 52);
+    let scale = Simd::<f64, N>::from_bits(low.select(low_bits, one_bits));
+    let low_tmp = low.select(tmp, Simd::splat(0.0));
+    let y = scale + scale * low_tmp;
+    let lo = scale - y + scale * low_tmp;
+    let hi = Simd::splat(1.0) + y;
+    let lo = Simd::splat(1.0) - hi + y + lo;
+    let rounded = hi + lo - Simd::splat(1.0);
+    let y = y.simd_lt(Simd::splat(1.0)).select(rounded, y);
+    let low_result = Simd::splat(f64::MIN_POSITIVE) * y;
 
-        if high {
-            high_result
-        } else if low {
-            low_result
-        } else {
-            normal_result
-        }
-    })
+    high.select(high_result, low.select(low_result, normal_result))
 }
 
 // Inlining keeps the coefficients and scale exponent constant.
@@ -102,86 +89,69 @@ fn exp_poly_f64<const N: usize>(
     let (tail, scale) = crate::table::lookup_pairs(table, index);
     let tail = Simd::<f64, N>::from_bits(tail);
     let sbits = scale + (ki << (52 - TABLE_BITS_F64));
-    vectorize!(N, {
-        let r2 = r * r;
-        let tmp = tail
-            + r * scalar!(poly[0])
-            + r2 * (scalar!(poly[1]) + r * scalar!(poly[2]))
-            + r2 * r2 * (scalar!(poly[3]) + r * scalar!(poly[4]));
-        exp_scale_f64(tmp, sbits, ki, large, scale_exponent)
-    })
+
+    let r2 = r * r;
+    let tmp = tail
+        + r * Simd::splat(poly[0])
+        + r2 * (Simd::splat(poly[1]) + r * Simd::splat(poly[2]))
+        + r2 * r2 * (Simd::splat(poly[3]) + r * Simd::splat(poly[4]));
+    exp_scale_f64(tmp, sbits, ki, large, scale_exponent)
 }
 
 /// Computes 2^x for each lane, assuming round-to-nearest, ties-to-even.
 #[inline]
 pub fn exp2_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
-    vectorize!(N, {
-        let overflow = x >= 1024.0;
-        let underflow = x <= -1075.0;
-        let nan = x.is_nan();
-        let tiny = x.abs() < scalar!(f64::from_bits(0x3c90000000000000));
-        let xd = if overflow | underflow | nan | tiny {
-            0.0
-        } else {
-            x
-        };
+    let overflow = x.simd_ge(Simd::splat(1024.0));
+    let underflow = x.simd_le(Simd::splat(-1075.0));
+    let nan = x.is_nan();
+    let tiny = x
+        .abs()
+        .simd_lt(Simd::splat(f64::from_bits(0x3c90000000000000)));
+    let xd = (overflow | underflow | nan | tiny).select(Simd::splat(0.0), x);
 
-        // x = k/128 + r, with |r| <= 1/256.
-        let kd = xd + scalar!(EXP2_SHIFT_F64);
-        let ki = kd.to_bits();
-        let kd = kd - scalar!(EXP2_SHIFT_F64);
-        let r = xd - kd;
-        let large = xd.abs() > 928.0;
-        let y = exp_poly_f64(ki, r, verbatim!(EXP2_POLY_F64), large, verbatim!(1));
+    // x = k/128 + r, with |r| <= 1/256.
+    let kd = xd + Simd::splat(EXP2_SHIFT_F64);
+    let ki = kd.to_bits();
+    let kd = kd - Simd::splat(EXP2_SHIFT_F64);
+    let r = xd - kd;
+    let large = xd.abs().simd_gt(Simd::splat(928.0));
+    let y = exp_poly_f64(ki, r, EXP2_POLY_F64, large, 1);
 
-        if nan {
-            x + x
-        } else if overflow {
-            scalar!(f64::INFINITY)
-        } else if underflow {
-            0.0
-        } else if tiny {
-            1.0 + x
-        } else {
-            y
-        }
-    })
+    nan.select(
+        x + x,
+        overflow.select(
+            Simd::splat(f64::INFINITY),
+            underflow.select(Simd::splat(0.0), tiny.select(Simd::splat(1.0) + x, y)),
+        ),
+    )
 }
 
 /// Computes e^x for each lane, assuming round-to-nearest, ties-to-even.
 #[inline]
 pub fn exp_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
-    vectorize!(N, {
-        // Other overflow and underflow cases are handled by scaling.
-        let overflow = x >= 1024.0;
-        let underflow = x <= -1024.0;
-        let nan = x.is_nan();
-        let tiny = x.abs() < scalar!(f64::from_bits(0x3c90000000000000));
-        let xd = if overflow | underflow | nan | tiny {
-            0.0
-        } else {
-            x
-        };
+    // Other overflow and underflow cases are handled by scaling.
+    let overflow = x.simd_ge(Simd::splat(1024.0));
+    let underflow = x.simd_le(Simd::splat(-1024.0));
+    let nan = x.is_nan();
+    let tiny = x
+        .abs()
+        .simd_lt(Simd::splat(f64::from_bits(0x3c90000000000000)));
+    let xd = (overflow | underflow | nan | tiny).select(Simd::splat(0.0), x);
 
-        let z = scalar!(INV_LN2_SCALED_F64) * xd;
-        let kd = z + scalar!(SHIFT);
-        let ki = kd.to_bits();
-        let kd = kd - scalar!(SHIFT);
-        // Split ln(2)/128 to preserve precision in the remainder.
-        let r = xd + kd * scalar!(NEG_LN2_HI_F64) + kd * scalar!(NEG_LN2_LO_F64);
-        let large = xd.abs() >= 512.0;
-        let y = exp_poly_f64(ki, r, verbatim!(EXP_POLY_F64), large, verbatim!(1009));
+    let z = Simd::splat(INV_LN2_SCALED_F64) * xd;
+    let kd = z + Simd::splat(SHIFT);
+    let ki = kd.to_bits();
+    let kd = kd - Simd::splat(SHIFT);
+    // Split ln(2)/128 to preserve precision in the remainder.
+    let r = xd + kd * Simd::splat(NEG_LN2_HI_F64) + kd * Simd::splat(NEG_LN2_LO_F64);
+    let large = xd.abs().simd_ge(Simd::splat(512.0));
+    let y = exp_poly_f64(ki, r, EXP_POLY_F64, large, 1009);
 
-        if nan {
-            x + x
-        } else if overflow {
-            scalar!(f64::INFINITY)
-        } else if underflow {
-            0.0
-        } else if tiny {
-            1.0 + x
-        } else {
-            y
-        }
-    })
+    nan.select(
+        x + x,
+        overflow.select(
+            Simd::splat(f64::INFINITY),
+            underflow.select(Simd::splat(0.0), tiny.select(Simd::splat(1.0) + x, y)),
+        ),
+    )
 }

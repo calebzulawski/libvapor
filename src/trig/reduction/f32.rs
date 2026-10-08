@@ -23,17 +23,15 @@ use super::super::data::*;
 use super::large_f32::reduce_large_f32;
 use super::{round_quadrant, Reduced};
 use core::simd::prelude::*;
-use simd_macros::vectorize;
 
-#[allow(unused_braces)]
 pub(crate) fn reduce_f32<const N: usize>(ax: Simd<f64, N>, bits: Simd<u64, N>) -> Reduced<N> {
     let large = ax.simd_ge(Simd::splat(REDUCTION_LIMIT_F32));
-    let (quadrant, hi) = vectorize!(N, {
-        let ax = if large { 0.0 } else { ax };
+    let (quadrant, hi) = {
+        let ax = large.select(Simd::splat(0.0), ax);
         let (quadrant, kd) = round_quadrant(ax);
-        let hi = ax - kd * scalar!(PIO2_REDUCE_HI_F32) - kd * scalar!(PIO2_REDUCE_LO_F32);
+        let hi = ax - kd * Simd::splat(PIO2_REDUCE_HI_F32) - kd * Simd::splat(PIO2_REDUCE_LO_F32);
         (quadrant, hi)
-    });
+    };
     if !large.any() {
         return Reduced {
             quadrant,

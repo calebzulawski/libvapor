@@ -28,90 +28,73 @@
 
 use super::super::data::*;
 use core::simd::prelude::*;
-use simd_macros::vectorize;
 
 fn exp_poly<const N: usize>(ki: Simd<u64, N>, r: Simd<f64, N>, poly: [f64; 3]) -> Simd<f32, N> {
-    vectorize!(N, {
-        // TABLE_F32[i] stores the bits of 2^(i/32) minus (i << 47). Adding the
-        // shifted rounding bits reconstructs 2^(k/32), including negative k.
-        let i = ki & 31;
-        let i = i as usize;
-        let t = <u64>::gather_or(&TABLE_F32, i, 0);
-        let s = <f64>::from_bits(t + (ki << scalar!(52 - TABLE_BITS_F32)));
+    // TABLE_F32[i] stores the bits of 2^(i/32) minus (i << 47). Adding the
+    // shifted rounding bits reconstructs 2^(k/32), including negative k.
+    let i = ki & Simd::splat(31);
+    let i = i.cast::<usize>();
+    let t = Simd::<u64, N>::gather_or(&TABLE_F32, i, Simd::splat(0));
+    let s = Simd::<f64, N>::from_bits(t + (ki << (52 - TABLE_BITS_F32)));
 
-        let z = scalar!(poly[0]) * r + scalar!(poly[1]);
-        let r2 = r * r;
-        let y = scalar!(poly[2]) * r + 1.0;
-        let y = z * r2 + y;
-        let y = y * s;
-        y as f32
-    })
+    let z = Simd::splat(poly[0]) * r + Simd::splat(poly[1]);
+    let r2 = r * r;
+    let y = Simd::splat(poly[2]) * r + Simd::splat(1.0);
+    let y = z * r2 + y;
+    let y = y * s;
+    y.cast::<f32>()
 }
 
 /// Computes 2^x for each lane, assuming round-to-nearest, ties-to-even.
-#[allow(
-    unused_braces,
-    unused_parens,
-    reason = "vectorize! retains scalar branch braces and grouping"
-)]
 #[inline]
 pub fn exp2_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    vectorize!(N, {
-        let overflow = x >= 128.0;
-        let underflow = x <= -150.0;
-        let nan = x.is_nan();
+    let overflow = x.simd_ge(Simd::splat(128.0));
+    let underflow = x.simd_le(Simd::splat(-150.0));
+    let nan = x.is_nan();
 
-        // Selects evaluate both branches. Keep exceptional lanes out
-        // of the reduction and restore their results afterward.
-        let xd = (if overflow | underflow | nan { 0.0 } else { x }) as f64;
-        let kd = xd + scalar!(EXP2_SHIFT_F32);
-        let ki = kd.to_bits();
-        let kd = kd - scalar!(EXP2_SHIFT_F32);
-        let r = xd - kd;
-        let y = exp_poly(ki, r, verbatim!(EXP2_POLY_F32));
+    // Selects evaluate both branches. Keep exceptional lanes out
+    // of the reduction and restore their results afterward.
+    let xd = (overflow | underflow | nan)
+        .select(Simd::splat(0.0), x)
+        .cast::<f64>();
+    let kd = xd + Simd::splat(EXP2_SHIFT_F32);
+    let ki = kd.to_bits();
+    let kd = kd - Simd::splat(EXP2_SHIFT_F32);
+    let r = xd - kd;
+    let y = exp_poly(ki, r, EXP2_POLY_F32);
 
-        if nan {
-            x + x
-        } else if overflow {
-            scalar!(f32::INFINITY)
-        } else if underflow {
-            0.0
-        } else {
-            y
-        }
-    })
+    nan.select(
+        x + x,
+        overflow.select(
+            Simd::splat(f32::INFINITY),
+            underflow.select(Simd::splat(0.0), y),
+        ),
+    )
 }
 
 /// Computes e^x for each lane, assuming round-to-nearest, ties-to-even.
-#[allow(
-    unused_braces,
-    unused_parens,
-    reason = "vectorize! retains scalar branch braces and grouping"
-)]
 #[inline]
 pub fn exp_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    vectorize!(N, {
-        let overflow = x > scalar!(f32::from_bits(0x42b17217));
-        let underflow = x < scalar!(f32::from_bits(0xc2cff1b4));
-        let nan = x.is_nan();
-        let xd = (if overflow | underflow | nan { 0.0 } else { x }) as f64;
+    let overflow = x.simd_gt(Simd::splat(f32::from_bits(0x42b17217)));
+    let underflow = x.simd_lt(Simd::splat(f32::from_bits(0xc2cff1b4)));
+    let nan = x.is_nan();
+    let xd = (overflow | underflow | nan)
+        .select(Simd::splat(0.0), x)
+        .cast::<f64>();
 
-        // x*32/ln(2) = k + r, with |r| <= 1/2.
-        let z = scalar!(INV_LN2_SCALED_F32) * xd;
-        let kd = z + scalar!(SHIFT);
-        let ki = kd.to_bits();
-        let kd = kd - scalar!(SHIFT);
-        let r = z - kd;
-        let y = exp_poly(ki, r, verbatim!(EXP_POLY_F32));
+    // x*32/ln(2) = k + r, with |r| <= 1/2.
+    let z = Simd::splat(INV_LN2_SCALED_F32) * xd;
+    let kd = z + Simd::splat(SHIFT);
+    let ki = kd.to_bits();
+    let kd = kd - Simd::splat(SHIFT);
+    let r = z - kd;
+    let y = exp_poly(ki, r, EXP_POLY_F32);
 
-        if nan {
-            x + x
-        } else if overflow {
-            scalar!(f32::INFINITY)
-        } else if underflow {
-            0.0
-        } else {
-            y
-        }
-    })
+    nan.select(
+        x + x,
+        overflow.select(
+            Simd::splat(f32::INFINITY),
+            underflow.select(Simd::splat(0.0), y),
+        ),
+    )
 }
