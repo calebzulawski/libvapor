@@ -1,4 +1,4 @@
-use libvapor_tools::oracle::PRECISION;
+use mwise_tools::oracle::PRECISION;
 use rug::Float;
 
 #[path = "../../../src/log/table_non_fma/params.rs"]
@@ -7,7 +7,7 @@ use params::{INDEX_SHIFT, OFFSET, TABLE_SIZE};
 
 fn main() {
     println!("// Generated reciprocals and logarithms of exact dyadic centers.");
-    println!("// Regenerate with: cargo run -p libvapor-tools --features oracle \\");
+    println!("// Regenerate with: cargo run -p mwise-tools --features oracle \\");
     println!("//   --bin generate-log-centers > src/log/table_non_fma/centers.rs\n");
     for (base2, name) in [(false, "LOG_TABLE"), (true, "LOG2_TABLE")] {
         println!("pub(super) const {name}: [[f64; 2]; super::params::TABLE_SIZE] = [");

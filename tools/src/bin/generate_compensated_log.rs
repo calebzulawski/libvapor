@@ -1,11 +1,11 @@
 //! Generate the compact compensated-log table from mathematical definitions.
 
-use libvapor_tools::oracle::PRECISION;
+use mwise_tools::oracle::PRECISION;
 use rug::Float;
 
 fn main() {
     println!("// Generated reciprocals and logarithms using {PRECISION}-bit MPFR arithmetic.");
-    println!("// Regenerate with: cargo run -p libvapor-tools --features oracle \\");
+    println!("// Regenerate with: cargo run -p mwise-tools --features oracle \\");
     println!("//   --bin generate-compensated-log > src/precision/log_table.rs");
     println!("// Each row holds the logarithm high bits and low bits, with the");
     println!("// reciprocal numerator packed into the low eight bits of the latter.");

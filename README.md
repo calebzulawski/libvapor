@@ -1,7 +1,7 @@
-Vector Algorithms for Portability (libvapor)
-============================================
+mwise (elementwise libm)
+=======================
 
-*libvapor* provides portable vectorized implementations of basic libm functions.
+*mwise* provides portable vectorized elementwise implementations of basic libm functions.
 
 ## License
 

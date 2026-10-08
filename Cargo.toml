@@ -1,5 +1,5 @@
 [package]
-name = "libvapor"
+name = "mwise"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
@@ -9,14 +9,11 @@ members = ["tools"]
 default-members = ["."]
 resolver = "2"
 
-[lib]
-name = "vapor"
-
 [features]
 # Use software math implementations even when the target supports hardware math.
 force-soft = []
 
 [dev-dependencies]
-libvapor-tools = { path = "tools", default-features = false }
+mwise-tools = { path = "tools", default-features = false }
 paste = "1"
 proptest = { version = "1", default-features = false, features = ["std"] }

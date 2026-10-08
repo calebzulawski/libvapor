@@ -1,7 +1,7 @@
 /*
  * Derived from musl src/math/__sin.c, __cos.c, __tan.c, atan.c,
  * __rem_pio2.c, and __rem_pio2_large.c, with changes.
- * Pi/2 Dekker split: libvapor.
+ * Pi/2 Dekker split: mwise.
  * SPDX-License-Identifier: MIT AND SunPro AND LicenseRef-SunPro-short
  */
 

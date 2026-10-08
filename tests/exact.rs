@@ -1,11 +1,11 @@
 #![feature(portable_simd)]
 
+use mwise::*;
 use proptest::{
     prelude::*,
     test_runner::{Config, TestRunner},
 };
 use std::simd::Simd;
-use vapor::*;
 
 macro_rules! exact_tests {
     ($($function:ident ($($arg:ident),+) => $expected:expr;)+) => {

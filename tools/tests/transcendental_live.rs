@@ -1,6 +1,6 @@
 #![feature(portable_simd)]
 
-use libvapor_tools::{oracle, Case, Width};
+use mwise_tools::{oracle, Case, Width};
 use proptest::{
     prelude::*,
     test_runner::{Config, TestRunner},
@@ -57,10 +57,10 @@ macro_rules! transcendental_tests {
             fn [<live_ $op>]() {
                 fn check<const N: usize>(width: Width, cases: &[Case]) {
                     match width {
-                        Width::F32 => libvapor_tools::check_accuracy!(f32, F32, N, cases,
-                            vapor::[<$op _f32>], $args => $outputs),
-                        Width::F64 => libvapor_tools::check_accuracy!(f64, F64, N, cases,
-                            vapor::[<$op _f64>], $args => $outputs),
+                        Width::F32 => mwise_tools::check_accuracy!(f32, F32, N, cases,
+                            mwise::[<$op _f32>], $args => $outputs),
+                        Width::F64 => mwise_tools::check_accuracy!(f64, F64, N, cases,
+                            mwise::[<$op _f64>], $args => $outputs),
                     }
                 }
                 fn check_lanes(width: Width, cases: &[Case]) {
@@ -141,7 +141,7 @@ fn erf_table_boundaries() {
         }
     }
     fn check<const N: usize>(cases: &[Case]) {
-        libvapor_tools::check_accuracy!(f64, F64, N, cases, vapor::erf_f64, (x) => |v| [v]);
+        mwise_tools::check_accuracy!(f64, F64, N, cases, mwise::erf_f64, (x) => |v| [v]);
     }
     check::<1>(&cases);
     check::<3>(&cases);
@@ -172,11 +172,11 @@ fn gamma_exponential_range_boundaries() {
             }
         }
         if op == "tgamma" {
-            libvapor_tools::check_accuracy!(f64, F64, 1, &cases, vapor::tgamma_f64, (x) => |v| [v]);
-            libvapor_tools::check_accuracy!(f64, F64, 8, &cases, vapor::tgamma_f64, (x) => |v| [v]);
+            mwise_tools::check_accuracy!(f64, F64, 1, &cases, mwise::tgamma_f64, (x) => |v| [v]);
+            mwise_tools::check_accuracy!(f64, F64, 8, &cases, mwise::tgamma_f64, (x) => |v| [v]);
         } else {
-            libvapor_tools::check_accuracy!(f64, F64, 1, &cases, vapor::lgamma_f64, (x) => |v| [v]);
-            libvapor_tools::check_accuracy!(f64, F64, 8, &cases, vapor::lgamma_f64, (x) => |v| [v]);
+            mwise_tools::check_accuracy!(f64, F64, 1, &cases, mwise::lgamma_f64, (x) => |v| [v]);
+            mwise_tools::check_accuracy!(f64, F64, 8, &cases, mwise::lgamma_f64, (x) => |v| [v]);
         }
     }
 }

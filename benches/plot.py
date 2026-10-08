@@ -153,7 +153,7 @@ def draw_panels(axes, profiles, operations, values, lanes):
 def label_figure(fig, left, profiles, metadata):
     figure_height = fig.get_figheight()
     target = metadata.get("target", metadata.get("host", ""))
-    title = "libvapor vs plain Rust" + (f" · {target}" if target else "")
+    title = "mwise vs plain Rust" + (f" · {target}" if target else "")
     fig.text(0.045, 1 - 0.45 / figure_height, title, fontsize=21,
              fontweight="bold", color="#172B4D")
     environment = [metadata.get("cpu"), metadata.get("os", metadata.get("system")),
@@ -169,7 +169,7 @@ def label_figure(fig, left, profiles, metadata):
         fig.text(0.5, 1 - 1.6 / figure_height, notes,
                  ha="center", fontsize=9, color="#526175")
     baseline_time = "Rust time with auto-vectorization" if metadata.get("auto_vectorization") is True else "Rust time"
-    fig.text(0.5, 0.4 / figure_height, f"Speedup (median {baseline_time} / median libvapor time)",
+    fig.text(0.5, 0.4 / figure_height, f"Speedup (median {baseline_time} / median mwise time)",
              ha="center", fontsize=12, color="#172B4D")
 
 

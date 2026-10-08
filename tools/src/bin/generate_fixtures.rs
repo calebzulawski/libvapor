@@ -1,4 +1,4 @@
-use libvapor_tools::{oracle, serialization, Width};
+use mwise_tools::{oracle, serialization, Width};
 use std::path::PathBuf;
 #[path = "../../../src/gamma/zeros.rs"]
 #[allow(dead_code)]

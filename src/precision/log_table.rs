@@ -1,5 +1,5 @@
 // Generated reciprocals and logarithms using 768-bit MPFR arithmetic.
-// Regenerate with: cargo run -p libvapor-tools --features oracle \
+// Regenerate with: cargo run -p mwise-tools --features oracle \
 //   --bin generate-compensated-log > src/precision/log_table.rs
 // Each row holds the logarithm high bits and low bits, with the
 // reciprocal numerator packed into the low eight bits of the latter.

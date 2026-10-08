@@ -1,5 +1,5 @@
 [package]
-name = "libvapor-tools"
+name = "mwise-tools"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -13,7 +13,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [dev-dependencies]
-vapor = { package = "libvapor", path = ".." }
+mwise = { path = ".." }
 paste = "1"
 proptest = { version = "1", default-features = false, features = ["std"] }
 

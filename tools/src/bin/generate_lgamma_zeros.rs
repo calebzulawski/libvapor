@@ -87,7 +87,7 @@ fn main() {
 
     println!("// Generated local Taylor expansions using {PRECISION}-bit MPFR arithmetic.");
     println!("// These constants are computed from mathematical definitions.");
-    println!("// Regenerate with: cargo run -p libvapor-tools --features oracle \\");
+    println!("// Regenerate with: cargo run -p mwise-tools --features oracle \\");
     println!("//   --bin generate-lgamma-zeros > src/gamma/zeros.rs");
     println!("pub struct Zero {{");
     println!("    pub center: f64,");

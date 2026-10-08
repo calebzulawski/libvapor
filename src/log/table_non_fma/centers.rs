@@ -1,5 +1,5 @@
 // Generated reciprocals and logarithms of exact dyadic centers.
-// Regenerate with: cargo run -p libvapor-tools --features oracle \
+// Regenerate with: cargo run -p mwise-tools --features oracle \
 //   --bin generate-log-centers > src/log/table_non_fma/centers.rs
 
 pub(super) const LOG_TABLE: [[f64; 2]; super::params::TABLE_SIZE] = [

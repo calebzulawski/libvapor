@@ -1,6 +1,6 @@
 #![feature(portable_simd)]
 
-use libvapor_tools::{serialization::cases, Width};
+use mwise_tools::{serialization::cases, Width};
 
 macro_rules! transcendental_tests {
     ($($op:ident $args:tt => $outputs:expr;)+) => {
@@ -8,10 +8,10 @@ macro_rules! transcendental_tests {
             $(#[test]
             fn $op() {
                 fn check<const N: usize>() {
-                    libvapor_tools::check_accuracy!(f32, F32, N, cases(Width::F32, stringify!($op)),
-                        vapor::[<$op _f32>], $args => $outputs);
-                    libvapor_tools::check_accuracy!(f64, F64, N, cases(Width::F64, stringify!($op)),
-                        vapor::[<$op _f64>], $args => $outputs);
+                    mwise_tools::check_accuracy!(f32, F32, N, cases(Width::F32, stringify!($op)),
+                        mwise::[<$op _f32>], $args => $outputs);
+                    mwise_tools::check_accuracy!(f64, F64, N, cases(Width::F64, stringify!($op)),
+                        mwise::[<$op _f64>], $args => $outputs);
                 }
                 check::<1>();
                 check::<2>();

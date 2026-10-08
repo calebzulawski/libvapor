@@ -1,6 +1,6 @@
 // Generated local Taylor expansions using 1536-bit MPFR arithmetic.
 // These constants are computed from mathematical definitions.
-// Regenerate with: cargo run -p libvapor-tools --features oracle \
+// Regenerate with: cargo run -p mwise-tools --features oracle \
 //   --bin generate-lgamma-zeros > src/gamma/zeros.rs
 pub struct Zero {
     pub center: f64,

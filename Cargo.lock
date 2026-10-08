@@ -67,31 +67,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "libvapor"
+name = "memchr"
+version = "2.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "mwise"
 version = "0.1.0"
 dependencies = [
- "libvapor-tools",
+ "mwise-tools",
  "paste",
  "proptest",
 ]
 
 [[package]]
-name = "libvapor-tools"
+name = "mwise-tools"
 version = "0.1.0"
 dependencies = [
- "libvapor",
+ "mwise",
  "paste",
  "proptest",
  "rug",
  "serde",
  "serde_json",
 ]
-
-[[package]]
-name = "memchr"
-version = "2.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "num-traits"

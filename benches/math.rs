@@ -15,7 +15,7 @@ mod libm {
 // One iteration processes 32 vectors. Input generation is outside the timer.
 const BATCH_SIZE: usize = 32;
 
-// Match input/output alignment across the Rust and libvapor paths.
+// Match input/output alignment across the Rust and mwise paths.
 #[repr(align(64))]
 struct Aligned<T>(T);
 
@@ -64,7 +64,7 @@ macro_rules! benchmark {
                     b.iter(|| {
                         for batch in 0..BATCH_SIZE {
                             $(let $arg = black_box(&$arg[batch]);)+
-                            benchmark!(@output $name, vapor::[<$name _ $kind>]($(*$arg),+));
+                            benchmark!(@output $name, mwise::[<$name _ $kind>]($(*$arg),+));
                         }
                     });
                 }

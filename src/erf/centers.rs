@@ -1,6 +1,6 @@
 // Generated erf values and derivatives using 768-bit MPFR arithmetic.
 // These constants are computed from mathematical definitions.
-// Regenerate with: cargo run -p libvapor-tools --features oracle \
+// Regenerate with: cargo run -p mwise-tools --features oracle \
 //   --bin generate-erf-table > src/erf/centers.rs
 pub(super) const TABLE: [[f64; 2]; 769] = [
     [

@@ -1,11 +1,11 @@
 //! Generate erf values and derivatives at exact dyadic centers.
-use libvapor_tools::oracle::PRECISION;
+use mwise_tools::oracle::PRECISION;
 use rug::{float::Constant, Float};
 
 fn main() {
     println!("// Generated erf values and derivatives using {PRECISION}-bit MPFR arithmetic.");
     println!("// These constants are computed from mathematical definitions.");
-    println!("// Regenerate with: cargo run -p libvapor-tools --features oracle \\");
+    println!("// Regenerate with: cargo run -p mwise-tools --features oracle \\");
     println!("//   --bin generate-erf-table > src/erf/centers.rs");
     println!("pub(super) const TABLE: [[f64; 2]; 769] = [");
     let mut factor = Float::with_val(PRECISION, Constant::Pi).sqrt().recip();
