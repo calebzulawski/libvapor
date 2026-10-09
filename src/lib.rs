@@ -10,6 +10,20 @@ mod backend;
 mod precision;
 mod table;
 
+mod basic;
+#[rustfmt::skip]
+pub use basic::{
+    fabs_f32, fabs_f64, copysign_f32, copysign_f64,
+    fmin_f32, fmin_f64, fmax_f32, fmax_f64,
+    isfinite_f32, isfinite_f64, isinf_f32, isinf_f64,
+    isnan_f32, isnan_f64, isnormal_f32, isnormal_f64,
+    issubnormal_f32, issubnormal_f64, signbit_f32, signbit_f64,
+    iszero_f32, iszero_f64,
+    isgreater_f32, isgreater_f64, isgreaterequal_f32, isgreaterequal_f64,
+    isless_f32, isless_f64, islessequal_f32, islessequal_f64,
+    islessgreater_f32, islessgreater_f64, isunordered_f32, isunordered_f64,
+};
+
 // Match the function-family order in the benchmark and plot lists.
 mod round;
 #[rustfmt::skip]

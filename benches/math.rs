@@ -113,6 +113,10 @@ macro_rules! benchmark {
     };
 }
 
+// The following functions are not benchmarked because they are trivial
+// core::simd wrappers: fabs, copysign, fmin, fmax, isfinite, isinf, isnan,
+// isnormal, issubnormal, signbit, iszero, isgreater, isgreaterequal,
+// isless, islessequal, islessgreater, and isunordered.
 benchmark!(trunc, (x), trunc, -16.0, 16.0);
 benchmark!(floor, (x), floor, -16.0, 16.0);
 benchmark!(ceil, (x), ceil, -16.0, 16.0);

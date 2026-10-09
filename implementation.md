@@ -10,14 +10,14 @@
 | --- | --- |
 | ❌ | `fpclassify` |
 | ❌ | `iscanonical` |
-| ❌ | `isfinite` |
-| ❌ | `isinf` |
-| ❌ | `isnan` |
-| ❌ | `isnormal` |
-| ❌ | `signbit` |
+| ✅ | `isfinite` |
+| ✅ | `isinf` |
+| ✅ | `isnan` |
+| ✅ | `isnormal` |
+| ✅ | `signbit` |
 | ❌ | `issignaling` |
-| ❌ | `issubnormal` |
-| ❌ | `iszero` |
+| ✅ | `issubnormal` |
+| ✅ | `iszero` |
 
 ### 7.12.4 Trigonometric functions
 
@@ -81,7 +81,7 @@
 | --- | --- |
 | ✅ | `cbrt` |
 | ❌ | `compoundn` |
-| ❌ | `fabs` |
+| ✅ | `fabs` |
 | ✅ | `hypot` |
 | ✅ | `pow` |
 | ❌ | `pown` |
@@ -131,7 +131,7 @@
 
 | Status | Function | Note |
 | --- | --- | --- |
-| ❌ | `copysign` | |
+| ✅ | `copysign` | |
 | 🚫 | `nan` | Parses a string. |
 | ❌ | `nextafter` | |
 | 🚫 | `nexttoward` | Requires `long double`. |
@@ -144,8 +144,8 @@
 | Status | Function |
 | --- | --- |
 | ❌ | `fdim` |
-| ❌ | `fmax` |
-| ❌ | `fmin` |
+| ✅ | `fmax` |
+| ✅ | `fmin` |
 | ❌ | `fmaximum` |
 | ❌ | `fminimum` |
 | ❌ | `fmaximum_mag` |
@@ -176,12 +176,12 @@
 
 | Status | Macro | Note |
 | --- | --- | --- |
-| ❌ | `isgreater` | |
-| ❌ | `isgreaterequal` | |
-| ❌ | `isless` | |
-| ❌ | `islessequal` | |
-| ❌ | `islessgreater` | |
-| ❌ | `isunordered` | |
+| ✅ | `isgreater` | |
+| ✅ | `isgreaterequal` | |
+| ✅ | `isless` | |
+| ✅ | `islessequal` | |
+| ✅ | `islessgreater` | |
+| ✅ | `isunordered` | |
 | 🚫 | `iseqsig` | Sets math error state for NaNs. |
 
 ## [C23: ISO/IEC 60559 floating-point arithmetic, Annex F (conditional)](https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3220.pdf#page=524)
