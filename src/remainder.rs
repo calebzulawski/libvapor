@@ -1,5 +1,6 @@
 //! Exact floating remainders using compensated quotient reduction.
-// Based on SLEEF src/libm/sleefsimddp.c (xfmod, xremainder), with changes.
+// Based on SLEEF src/libm/sleefsimddp.c (xfmod, xremainder), with changes and
+// extended for remquo.
 // Copyright Naoki Shibata and contributors 2010 - 2025.
 // SPDX-License-Identifier: BSL-1.0
 
@@ -34,7 +35,19 @@ use core::simd::prelude::*;
 use std::simd::StdFloat;
 
 #[inline]
-fn reduce<const N: usize, const NEAREST: bool>(x: Simd<f64, N>, y: Simd<f64, N>) -> Simd<f64, N> {
+fn signed_quotient<const N: usize>(q: Simd<i32, N>, negative: Mask<i32, N>) -> Simd<i32, N> {
+    let q = q & Simd::splat(7);
+    negative.select(-q, q)
+}
+
+// Returning only the remainder avoids an unused quotient in the return buffer
+// when this reducer is not inlined. QUOTIENT=false also removes the output argument.
+#[inline]
+fn reduce<const N: usize, const NEAREST: bool, const QUOTIENT: bool>(
+    x: Simd<f64, N>,
+    y: Simd<f64, N>,
+    quotient_out: &mut Simd<i32, N>,
+) -> Simd<f64, N> {
     let ax = x.abs();
     let ay = y.abs();
     let quotient = ax / ay;
@@ -56,6 +69,15 @@ fn reduce<const N: usize, const NEAREST: bool>(x: Simd<f64, N>, y: Simd<f64, N>)
             let odd = (q.cast::<u64>() & Simd::splat(1)).simd_ne(Simd::splat(0));
             let subtract = r.simd_gt(half) | (r.simd_eq(half) & odd);
             r = subtract.select(r - ay, r);
+            if QUOTIENT {
+                q += subtract.select(Simd::splat(1.0), Simd::splat(0.0));
+            }
+        }
+        if QUOTIENT {
+            *quotient_out = signed_quotient(
+                (q.cast::<u64>() & Simd::splat(7)).cast(),
+                (x.is_sign_negative() ^ y.is_sign_negative()).cast(),
+            );
         }
         return Simd::from_bits(r.to_bits() ^ (x.to_bits() & Simd::splat(1_u64 << 63)));
     }
@@ -66,6 +88,7 @@ fn reduce<const N: usize, const NEAREST: bool>(x: Simd<f64, N>, y: Simd<f64, N>)
     let (my, ey) = frexp(ay);
     let divisor_exponent = ey + Simd::splat(if NEAREST { 1 } else { 0 });
     let mut r = Dd::from(mx);
+    let mut quotient = Simd::<i32, N>::splat(0);
     // Each quotient removes up to 50 exponent bits. Products and residuals
     // retain their low component, including when x/y overflows.
     loop {
@@ -79,23 +102,32 @@ fn reduce<const N: usize, const NEAREST: bool>(x: Simd<f64, N>, y: Simd<f64, N>)
         }
         let chunk = gap.simd_clamp(Simd::splat(0), Simd::splat(50));
         let denominator = scale(my, -chunk);
-        let q = crate::trunc_f64(r.hi / denominator);
+        let mut q = crate::trunc_f64(r.hi / denominator);
         let mut next = r.sub(Dd::product(q, denominator)).normalize();
         // Floating division can round across an integer quotient boundary.
-        next = Dd::select(
-            next.hi.simd_lt(Simd::splat(0.0)),
-            next.add_float(denominator),
-            next,
-        );
-        next = Dd::select(
-            next.add_float(-denominator)
-                .normalize()
-                .hi
-                .simd_ge(Simd::splat(0.0)),
-            next.add_float(-denominator),
-            next,
-        )
-        .normalize();
+        let below = next.hi.simd_lt(Simd::splat(0.0));
+        next = Dd::select(below, next.add_float(denominator), next);
+        let above = next
+            .add_float(-denominator)
+            .normalize()
+            .hi
+            .simd_ge(Simd::splat(0.0));
+        next = Dd::select(above, next.add_float(-denominator), next).normalize();
+        if QUOTIENT {
+            q += above.select(Simd::splat(1.0), Simd::splat(0.0))
+                - below.select(Simd::splat(1.0), Simd::splat(0.0));
+            // This chunk removes q * 2^(ex-ey-chunk) multiples of y.
+            // Higher shifts cannot affect the three low quotient bits.
+            let shift = ex - ey - chunk;
+            let bits = (q.cast::<u64>() & Simd::splat(7)).cast::<i32>()
+                << shift
+                    .simd_clamp(Simd::splat(0), Simd::splat(3))
+                    .cast::<i32>();
+            quotient += (active & shift.simd_lt(Simd::splat(3)))
+                .cast::<i32>()
+                .select(bits, Simd::splat(0));
+            quotient &= Simd::splat(7);
+        }
         next = Dd::select(active, next, r);
         let (mantissa, adjustment) = frexp(next.hi);
         let nonzero = active & next.hi.simd_ne(Simd::splat(0.0));
@@ -125,50 +157,94 @@ fn reduce<const N: usize, const NEAREST: bool>(x: Simd<f64, N>, y: Simd<f64, N>)
             once.select(Simd::splat(1.0), Simd::splat(0.0)),
         );
         let adjusted = scale(a.sub(Dd::product(q, my)).value(), ey);
-        result = gap.simd_ge(Simd::splat(-1)).select(adjusted, result);
+        let adjust = gap.simd_ge(Simd::splat(-1));
+        result = adjust.select(adjusted, result);
+        if QUOTIENT {
+            quotient += adjust.cast::<i32>().select(q.cast::<i32>(), Simd::splat(0));
+        }
     }
     // Apply the dividend's sign by xor: a nearest remainder may be negative.
     result = Simd::from_bits(result.to_bits() ^ (x.to_bits() & Simd::splat(1_u64 << 63)));
     result = x.simd_eq(Simd::splat(0.0)).select(x, result);
     let exceptional = (y.is_infinite() & x.is_finite()).select(x, Simd::splat(f64::NAN));
+    if QUOTIENT {
+        quotient = signed_quotient(
+            quotient,
+            (x.is_sign_negative() ^ y.is_sign_negative()).cast(),
+        );
+        *quotient_out = valid.cast::<i32>().select(quotient, Simd::splat(0));
+    }
     valid.select(result, exceptional)
 }
 
 /// Computes x-y*trunc(x/y) exactly for each lane, including overflowing ratios.
 #[inline]
 pub fn fmod_f64<const N: usize>(x: Simd<f64, N>, y: Simd<f64, N>) -> Simd<f64, N> {
-    reduce::<N, false>(x, y)
+    reduce::<N, false, false>(x, y, &mut Simd::splat(0))
 }
 
 /// Computes the IEEE remainder, choosing the nearest even integer quotient.
 #[inline]
 pub fn remainder_f64<const N: usize>(x: Simd<f64, N>, y: Simd<f64, N>) -> Simd<f64, N> {
-    reduce::<N, true>(x, y)
+    reduce::<N, true, false>(x, y, &mut Simd::splat(0))
 }
 
 /// Computes x-y*trunc(x/y) exactly for each lane, including overflowing ratios.
 #[inline]
 pub fn fmod_f32<const N: usize>(x: Simd<f32, N>, y: Simd<f32, N>) -> Simd<f32, N> {
-    reduce_f32::<N, false>(x, y)
+    reduce_f32::<N, false, false>(x, y, &mut Simd::splat(0))
 }
 
 /// Computes the IEEE remainder, choosing the nearest even integer quotient.
 #[inline]
 pub fn remainder_f32<const N: usize>(x: Simd<f32, N>, y: Simd<f32, N>) -> Simd<f32, N> {
-    reduce_f32::<N, true>(x, y)
+    reduce_f32::<N, true, false>(x, y, &mut Simd::splat(0))
+}
+
+/// Returns the IEEE remainder and the signed low three bits of the quotient.
+///
+/// The quotient is rounded to the nearest integer, with ties to even. Its
+/// returned magnitude is modulo 8 and its sign follows x/y. Invalid inputs
+/// return a NaN remainder and a zero quotient; finite x and infinite y return
+/// x and a zero quotient. A zero remainder preserves the sign of x.
+#[inline]
+pub fn remquo_f64<const N: usize>(
+    x: Simd<f64, N>,
+    y: Simd<f64, N>,
+) -> (Simd<f64, N>, Simd<i32, N>) {
+    let mut quotient = Simd::splat(0);
+    let remainder = reduce::<N, true, true>(x, y, &mut quotient);
+    (remainder, quotient)
+}
+
+/// Returns the IEEE remainder and the signed low three bits of the quotient.
+///
+/// The quotient is rounded to the nearest integer, with ties to even. Its
+/// returned magnitude is modulo 8 and its sign follows x/y. Invalid inputs
+/// return a NaN remainder and a zero quotient; finite x and infinite y return
+/// x and a zero quotient. A zero remainder preserves the sign of x.
+#[inline]
+pub fn remquo_f32<const N: usize>(
+    x: Simd<f32, N>,
+    y: Simd<f32, N>,
+) -> (Simd<f32, N>, Simd<i32, N>) {
+    let mut quotient = Simd::splat(0);
+    let remainder = reduce_f32::<N, true, true>(x, y, &mut quotient);
+    (remainder, quotient)
 }
 
 #[inline]
-fn reduce_f32<const N: usize, const NEAREST: bool>(
+fn reduce_f32<const N: usize, const NEAREST: bool, const QUOTIENT: bool>(
     x: Simd<f32, N>,
     y: Simd<f32, N>,
+    quotient_out: &mut Simd<i32, N>,
 ) -> Simd<f32, N> {
     let ax = x.abs();
     let ay = y.abs();
     let quotient = ax / ay;
     let quick = x.is_finite() & y.is_finite() & quotient.simd_lt(Simd::splat(4194304.0));
     if !quick.all() {
-        return reduce::<N, NEAREST>(x.cast(), y.cast()).cast();
+        return reduce::<N, NEAREST, QUOTIENT>(x.cast(), y.cast(), quotient_out).cast();
     }
     let mut q = crate::trunc_f32(quotient);
     let mut r = if crate::backend::use_hardware_fma_f32::<N>() {
@@ -186,6 +262,12 @@ fn reduce_f32<const N: usize, const NEAREST: bool>(
         let odd = (q.cast::<u32>() & Simd::splat(1)).simd_ne(Simd::splat(0));
         let subtract = r.simd_gt(complement) | (r.simd_eq(complement) & odd);
         r = subtract.select(r - ay, r);
+        if QUOTIENT {
+            q += subtract.select(Simd::splat(1.0), Simd::splat(0.0));
+        }
+    }
+    if QUOTIENT {
+        *quotient_out = signed_quotient(q.cast(), x.is_sign_negative() ^ y.is_sign_negative());
     }
     Simd::from_bits(r.to_bits() ^ (x.to_bits() & Simd::splat(1_u32 << 31)))
 }
@@ -235,4 +317,48 @@ mod tests {
             assert_eq!(fmod_f64(x, y)[i].to_bits(), (x[i] % y[i]).to_bits());
         }
     }
+
+    macro_rules! remquo_tests {
+        ($kind:ident, $function:ident) => {
+            paste::paste! {
+                #[test]
+                fn [<remquo_ties_signs_and_wraparound_ $kind>]() {
+                    let x = Simd::from_array([1.0, 3.0, 5.0, 7.0, 15.0, -29.0, 29.0, -4.0]);
+                    let y = Simd::from_array([2.0, 2.0, 2.0, 2.0, 2.0, 3.0, -3.0, 2.0]);
+                    let (r, q) = $function(x, y);
+                    let expected = Simd::<$kind, 8>::from_array([1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, -0.0]);
+                    assert_eq!(r.to_bits(), expected.to_bits());
+                    assert_eq!(q.to_array(), [0, 2, 2, 4, 0, -2, -2, -2]);
+
+                    // Rounded 1.5*y lies just below the exact tie for this y.
+                    let y = Simd::<$kind, 1>::splat($kind::from_bits((1.0 as $kind).to_bits() + 3));
+                    let x = y * Simd::splat(1.5);
+                    let (r, q) = $function(x, y);
+                    assert_eq!(r, x - y);
+                    assert_eq!(q[0], 1);
+                }
+
+                #[test]
+                fn [<remquo_extreme_and_exceptional_inputs_ $kind>]() {
+                    let tiny = $kind::from_bits(1);
+                    let large = 2.0_f64.powi(120) as $kind;
+                    let x = Simd::from_array([large, $kind::MAX, 7.0 * tiny, -9.0 * tiny,
+                        -0.0, $kind::INFINITY, $kind::NAN, 1.0]);
+                    let y = Simd::from_array([3.0, $kind::MIN_POSITIVE, 2.0 * tiny, 2.0 * tiny,
+                        $kind::INFINITY, 1.0, 2.0, 0.0]);
+                    let (r, q) = $function(x, y);
+                    assert_eq!(q.to_array(), [5, 0, 4, -4, 0, 0, 0, 0]);
+                    for (lane, expected) in [1.0, 0.0, -tiny, -tiny, -0.0].into_iter().enumerate() {
+                        assert_eq!(r[lane].to_bits(), expected.to_bits());
+                    }
+                    for lane in 5..8 {
+                        assert!(r[lane].is_nan());
+                    }
+                }
+            }
+        };
+    }
+
+    remquo_tests!(f32, remquo_f32);
+    remquo_tests!(f64, remquo_f64);
 }

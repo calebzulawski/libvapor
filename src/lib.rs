@@ -51,7 +51,7 @@ pub use round::{
 };
 
 mod remainder;
-pub use remainder::{fmod_f32, fmod_f64, remainder_f32, remainder_f64};
+pub use remainder::{fmod_f32, fmod_f64, remainder_f32, remainder_f64, remquo_f32, remquo_f64};
 
 mod sqrt;
 pub use sqrt::{sqrt_f32, sqrt_f64};

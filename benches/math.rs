@@ -9,6 +9,8 @@ mod libm {
     unsafe extern "C" {
         pub(super) fn remainder(x: f64, y: f64) -> f64;
         pub(super) fn remainderf(x: f32, y: f32) -> f32;
+        pub(super) fn remquo(x: f64, y: f64, quotient: *mut i32) -> f64;
+        pub(super) fn remquof(x: f32, y: f32, quotient: *mut i32) -> f32;
     }
 }
 
@@ -86,6 +88,20 @@ macro_rules! benchmark {
             libm::remainder($x[lane], $y[lane])
         })))
     };
+    (@scalar_output remquo, f32, $lanes:literal, $scalar:ident, ($x:ident, $y:ident)) => {
+        benchmark!(@remquo_scalar $lanes, libm::remquof, $x, $y)
+    };
+    (@scalar_output remquo, f64, $lanes:literal, $scalar:ident, ($x:ident, $y:ident)) => {
+        benchmark!(@remquo_scalar $lanes, libm::remquo, $x, $y)
+    };
+    (@remquo_scalar $lanes:literal, $function:path, $x:ident, $y:ident) => {{
+        let mut remainder = [0.0; $lanes];
+        let mut quotient = [0; $lanes];
+        for lane in 0..$lanes {
+            remainder[lane] = unsafe { $function($x[lane], $y[lane], &mut quotient[lane]) };
+        }
+        black_box(Aligned((remainder, quotient)));
+    }};
     (@scalar_output lround, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident)) => {
         black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
             $x[lane].round() as i32
@@ -118,6 +134,10 @@ macro_rules! benchmark {
         let (sin, cos) = $value;
         black_box(Aligned((sin.to_array(), cos.to_array())));
     }};
+    (@output remquo, $value:expr) => {{
+        let (remainder, quotient) = $value;
+        black_box(Aligned((remainder.to_array(), quotient.to_array())));
+    }};
     (@output $name:ident, $value:expr) => {
         black_box(Aligned($value.to_array()))
     };
@@ -133,6 +153,7 @@ benchmark!(lround, (x), round, -16.0, 16.0);
 benchmark!(llround, (x), round, -16.0, 16.0);
 benchmark!(fmod, (x, y), fmod, -16.0, 16.0);
 benchmark!(remainder, (x, y), remainder, -16.0, 16.0);
+benchmark!(remquo, (x, y), remquo, -16.0, 16.0);
 benchmark!(sqrt, (x), sqrt, 0.125, 256.0);
 benchmark!(cbrt, (x), cbrt, -16.0, 16.0);
 benchmark!(hypot, (x, y), hypot, -16.0, 16.0);

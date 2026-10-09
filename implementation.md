@@ -125,7 +125,7 @@
 | --- | --- |
 | ✅ | `fmod` |
 | ✅ | `remainder` |
-| ❌ | `remquo` |
+| ✅ | `remquo` |
 
 ### 7.12.11 Manipulation functions
 
