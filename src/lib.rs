@@ -34,7 +34,8 @@ mod round;
 pub use round::{
     trunc_f32, trunc_f64,
     floor_f32, floor_f64, ceil_f32, ceil_f64,
-    round_f32, round_f64,
+    round_f32, round_f64, roundeven_f32, roundeven_f64,
+    lround_f32, lround_f64, llround_f32, llround_f64,
 };
 
 mod remainder;

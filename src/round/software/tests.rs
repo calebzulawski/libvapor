@@ -41,6 +41,7 @@ macro_rules! rounding_boundaries {
                             ("floor", [<floor_ $kind>](x).to_array(), input.map($kind::floor)),
                             ("ceil", [<ceil_ $kind>](x).to_array(), input.map($kind::ceil)),
                             ("round", [<round_ $kind>](x).to_array(), input.map($kind::round)),
+                            ("roundeven", [<roundeven_ $kind>](x).to_array(), input.map($kind::round_ties_even)),
                         ] {
                             for lane in 0..N {
                                 assert!(if expected[lane].is_nan() { got[lane].is_nan() }

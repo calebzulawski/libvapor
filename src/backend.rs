@@ -175,6 +175,7 @@ pub(crate) const fn use_hardware_sqrt_f64<const N: usize>() -> bool {
 pub(crate) enum RoundingMode {
     Directed,
     TiesAway,
+    TiesEven,
 }
 
 #[inline]
@@ -202,9 +203,10 @@ pub(crate) const fn use_hardware_round_f32<const N: usize>(mode: RoundingMode) -
     )) {
         return true;
     }
-    // Wasm and LSX lower directed rounding natively, but round ties-away
-    // still calls a library helper. Keep that mode on our software path.
-    matches!(mode, RoundingMode::Directed)
+    // Wasm and LSX avoid library helpers for directed and ties-even rounding.
+    // LLVM currently scalarizes LSX ties-even to frint.s/frint.d per lane.
+    // Ties-away still calls a library helper, so keep it on our software path.
+    matches!(mode, RoundingMode::Directed | RoundingMode::TiesEven)
         && cfg!(any(
             target_arch = "wasm32",
             target_arch = "wasm64",
@@ -244,9 +246,10 @@ pub(crate) const fn use_hardware_round_f64<const N: usize>(mode: RoundingMode) -
     )) {
         return true;
     }
-    // Wasm and LSX lower directed rounding natively, but round ties-away
-    // still calls a library helper. Keep that mode on our software path.
-    matches!(mode, RoundingMode::Directed)
+    // Wasm and LSX avoid library helpers for directed and ties-even rounding.
+    // LLVM currently scalarizes LSX ties-even to frint.s/frint.d per lane.
+    // Ties-away still calls a library helper, so keep it on our software path.
+    matches!(mode, RoundingMode::Directed | RoundingMode::TiesEven)
         && cfg!(any(
             target_arch = "wasm32",
             target_arch = "wasm64",

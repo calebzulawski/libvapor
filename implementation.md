@@ -110,9 +110,9 @@
 | 🚫 | `lrint` | Reads the current rounding mode. |
 | 🚫 | `llrint` | Reads the current rounding mode. |
 | ✅ | `round` | |
-| ❌ | `lround` | |
-| ❌ | `llround` | |
-| ❌ | `roundeven` | |
+| ✅ | `lround` | |
+| ✅ | `llround` | |
+| ✅ | `roundeven` | |
 | ✅ | `trunc` | |
 | 🚫 | `fromfp` | Controls floating-point exception flags. |
 | 🚫 | `ufromfp` | Controls floating-point exception flags. |

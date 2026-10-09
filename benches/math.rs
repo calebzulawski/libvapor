@@ -86,6 +86,16 @@ macro_rules! benchmark {
             libm::remainder($x[lane], $y[lane])
         })))
     };
+    (@scalar_output lround, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
+            $x[lane].round() as i32
+        })))
+    };
+    (@scalar_output llround, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
+            $x[lane].round() as i64
+        })))
+    };
     (@scalar_output lgamma, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident)) => {
         black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
             $kind::$scalar($x[lane]).0
@@ -118,6 +128,9 @@ benchmark!(trunc, (x), trunc, -16.0, 16.0);
 benchmark!(floor, (x), floor, -16.0, 16.0);
 benchmark!(ceil, (x), ceil, -16.0, 16.0);
 benchmark!(round, (x), round, -16.0, 16.0);
+benchmark!(roundeven, (x), round_ties_even, -16.0, 16.0);
+benchmark!(lround, (x), round, -16.0, 16.0);
+benchmark!(llround, (x), round, -16.0, 16.0);
 benchmark!(fmod, (x, y), fmod, -16.0, 16.0);
 benchmark!(remainder, (x, y), remainder, -16.0, 16.0);
 benchmark!(sqrt, (x), sqrt, 0.125, 256.0);

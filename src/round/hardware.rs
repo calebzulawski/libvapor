@@ -32,3 +32,11 @@ pub fn round_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
 pub fn round_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     x.round()
 }
+#[inline]
+pub fn roundeven_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    x.round_ties_even()
+}
+#[inline]
+pub fn roundeven_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    x.round_ties_even()
+}

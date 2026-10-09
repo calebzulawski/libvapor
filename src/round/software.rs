@@ -17,6 +17,8 @@ const MODE_FLOOR: u8 = 1;
 const MODE_CEIL: u8 = 2;
 /// Round to nearest, with ties away from zero.
 const MODE_ROUND_TIES_AWAY: u8 = 3;
+/// Round to nearest, with ties to even.
+const MODE_ROUND_TIES_EVEN: u8 = 4;
 
 // Use portable SIMD integer conversions on x86 targets without SSE4.1.
 const USE_INT_CONVERSION: bool = cfg!(all(

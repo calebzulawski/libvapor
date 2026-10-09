@@ -28,7 +28,7 @@
 
 use core::simd::prelude::*;
 
-use super::{MODE_CEIL, MODE_FLOOR, MODE_ROUND_TIES_AWAY, MODE_TRUNC};
+use super::{MODE_CEIL, MODE_FLOOR, MODE_ROUND_TIES_AWAY, MODE_ROUND_TIES_EVEN, MODE_TRUNC};
 
 #[inline]
 fn rounded_f32<const N: usize, const MODE: u8>(x: Simd<f32, N>) -> Simd<f32, N> {
@@ -69,8 +69,11 @@ fn rounded_f32<const N: usize, const MODE: u8>(x: Simd<f32, N>) -> Simd<f32, N> 
         // ceil(x) = -floor(-x). Keep the subtraction form to
         // preserve negative zero when a negative input rounds up.
         return large.select(x, -(-signed - signed.simd_lt(x).select(one, zero)));
-    } else {
+    } else if MODE == MODE_ROUND_TIES_AWAY {
         nearest + (a - nearest).simd_eq(Simd::splat(0.5)).select(one, zero)
+    } else {
+        // The bias addition already rounds to nearest with ties to even.
+        nearest
     };
     large.select(x, y.copysign(x))
 }
@@ -97,6 +100,12 @@ pub fn ceil_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
 #[inline]
 pub fn round_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
     rounded_f32::<N, MODE_ROUND_TIES_AWAY>(x)
+}
+
+/// Rounds each lane to nearest, with ties to even.
+#[inline]
+pub fn roundeven_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    rounded_f32::<N, MODE_ROUND_TIES_EVEN>(x)
 }
 
 #[cfg(test)]
