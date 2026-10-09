@@ -32,13 +32,3 @@ pub fn round_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
 pub fn round_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
     x.round()
 }
-
-#[inline]
-pub fn fract_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    x - x.trunc()
-}
-
-#[inline]
-pub fn fract_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
-    x - x.trunc()
-}

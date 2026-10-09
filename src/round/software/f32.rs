@@ -99,12 +99,6 @@ pub fn round_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
     rounded_f32::<N, MODE_ROUND_TIES_AWAY>(x)
 }
 
-/// Computes the fractional part of each lane.
-#[inline]
-pub fn fract_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
-    x - trunc_f32(x)
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::tests::rounding_boundaries;

@@ -38,7 +38,6 @@ macro_rules! rounding_boundaries {
                     paste::paste! {
                         for (name, got, expected) in [
                             ("trunc", [<trunc_ $kind>](x).to_array(), input.map($kind::trunc)),
-                            ("fract", [<fract_ $kind>](x).to_array(), input.map($kind::fract)),
                             ("floor", [<floor_ $kind>](x).to_array(), input.map($kind::floor)),
                             ("ceil", [<ceil_ $kind>](x).to_array(), input.map($kind::ceil)),
                             ("round", [<round_ $kind>](x).to_array(), input.map($kind::round)),

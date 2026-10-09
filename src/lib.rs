@@ -14,7 +14,7 @@ mod table;
 mod round;
 #[rustfmt::skip]
 pub use round::{
-    trunc_f32, trunc_f64, fract_f32, fract_f64,
+    trunc_f32, trunc_f64,
     floor_f32, floor_f64, ceil_f32, ceil_f64,
     round_f32, round_f64,
 };

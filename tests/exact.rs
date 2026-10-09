@@ -55,7 +55,6 @@ macro_rules! exact_tests {
 
 exact_tests! {
     trunc(x) => x.trunc();
-    fract(x) => x.fract();
     floor(x) => x.floor();
     ceil(x) => x.ceil();
     round(x) => x.round();

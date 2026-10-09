@@ -114,7 +114,6 @@ macro_rules! benchmark {
 }
 
 benchmark!(trunc, (x), trunc, -16.0, 16.0);
-benchmark!(fract, (x), fract, -16.0, 16.0);
 benchmark!(floor, (x), floor, -16.0, 16.0);
 benchmark!(ceil, (x), ceil, -16.0, 16.0);
 benchmark!(round, (x), round, -16.0, 16.0);
