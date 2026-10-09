@@ -25,6 +25,7 @@ pub use basic::{
     isgreater_f32, isgreater_f64, isgreaterequal_f32, isgreaterequal_f64,
     isless_f32, isless_f64, islessequal_f32, islessequal_f64,
     islessgreater_f32, islessgreater_f64, isunordered_f32, isunordered_f64,
+    totalorder_f32, totalorder_f64, totalordermag_f32, totalordermag_f64,
 };
 
 // Match the function-family order in the benchmark and plot lists.
@@ -66,6 +67,7 @@ mod log;
 pub use log::{
     log_f32, log_f64, log2_f32, log2_f64,
     log10_f32, log10_f64, log1p_f32, log1p_f64,
+    log1p_f32 as logp1_f32, log1p_f64 as logp1_f64,
 };
 
 mod trig;

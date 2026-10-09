@@ -67,7 +67,7 @@
 | ✅ | `log10` |
 | ❌ | `log10p1` |
 | ✅ | `log1p` |
-| ❌ | `logp1` |
+| ✅ | `logp1` |
 | ✅ | `log2` |
 | ❌ | `log2p1` |
 | ❌ | `logb` |
@@ -190,8 +190,8 @@
 
 | Status | Function |
 | --- | --- |
-| ❌ | `totalorder` |
-| ❌ | `totalordermag` |
+| ✅ | `totalorder` |
+| ✅ | `totalordermag` |
 
 ### F.10.13 Payload functions
 

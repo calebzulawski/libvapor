@@ -2,7 +2,7 @@
 
 use core::simd::{
     cmp::{SimdPartialEq, SimdPartialOrd},
-    num::SimdFloat,
+    num::{SimdFloat, SimdUint},
     Mask, Select, Simd,
 };
 
@@ -210,3 +210,34 @@ macro_rules! classification {
 
 classification!(fpclassify_f32, issignaling_f32, f32, i32);
 classification!(fpclassify_f64, issignaling_f64, f64, i64);
+
+macro_rules! total_order {
+    ($order:ident, $magnitude:ident, $kind:ident, $mask:ty) => {
+        /// Tests whether x precedes or equals y in IEEE 754 total order for each lane.
+        /// Includes signed zeros and NaN signs, signaling bits, and payloads.
+        #[inline]
+        pub fn $order<const N: usize>(x: Simd<$kind, N>, y: Simd<$kind, N>) -> Mask<$mask, N> {
+            // TODO: Use SIMD total_cmp once portable SIMD provides it.
+            let x = x.to_bits().cast::<$mask>();
+            let y = y.to_bits().cast::<$mask>();
+            let magnitude = Simd::splat(<$mask>::MAX);
+            let sign_shift = (<$mask>::BITS - 1) as $mask;
+            // Reverse the magnitude bits of negative values for signed integer ordering.
+            let x = x ^ ((x >> sign_shift) & magnitude);
+            let y = y ^ ((y >> sign_shift) & magnitude);
+            x.simd_le(y)
+        }
+
+        /// Tests whether the magnitude of x precedes or equals that of y in IEEE 754 total order.
+        /// Ignores signs, including those of zeros and NaNs.
+        #[inline]
+        pub fn $magnitude<const N: usize>(x: Simd<$kind, N>, y: Simd<$kind, N>) -> Mask<$mask, N> {
+            let x = x.abs().to_bits().cast::<$mask>();
+            let y = y.abs().to_bits().cast::<$mask>();
+            x.simd_le(y)
+        }
+    };
+}
+
+total_order!(totalorder_f32, totalordermag_f32, f32, i32);
+total_order!(totalorder_f64, totalordermag_f64, f64, i64);
