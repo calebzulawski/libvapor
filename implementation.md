@@ -6,18 +6,18 @@
 
 ### 7.12.3 Classification macros
 
-| Status | Macro |
-| --- | --- |
-| ❌ | `fpclassify` |
-| ❌ | `iscanonical` |
-| ✅ | `isfinite` |
-| ✅ | `isinf` |
-| ✅ | `isnan` |
-| ✅ | `isnormal` |
-| ✅ | `signbit` |
-| ❌ | `issignaling` |
-| ✅ | `issubnormal` |
-| ✅ | `iszero` |
+| Status | Macro | Note |
+| --- | --- | --- |
+| ✅ | `fpclassify` | |
+| 🚫 | `iscanonical` | Always true for f32/f64. |
+| ✅ | `isfinite` | |
+| ✅ | `isinf` | |
+| ✅ | `isnan` | |
+| ✅ | `isnormal` | |
+| ✅ | `signbit` | |
+| ✅ | `issignaling` | |
+| ✅ | `issubnormal` | |
+| ✅ | `iszero` | |
 
 ### 7.12.4 Trigonometric functions
 

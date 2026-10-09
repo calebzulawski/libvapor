@@ -3,8 +3,19 @@
 use core::simd::{
     cmp::{SimdPartialEq, SimdPartialOrd},
     num::SimdFloat,
-    Mask, Simd,
+    Mask, Select, Simd,
 };
+
+/// NaN category returned by the `fpclassify` functions.
+pub const FP_NAN: i32 = 0;
+/// Infinity category returned by the `fpclassify` functions.
+pub const FP_INFINITE: i32 = 1;
+/// Zero category returned by the `fpclassify` functions.
+pub const FP_ZERO: i32 = 2;
+/// Subnormal category returned by the `fpclassify` functions.
+pub const FP_SUBNORMAL: i32 = 3;
+/// Normal category returned by the `fpclassify` functions.
+pub const FP_NORMAL: i32 = 4;
 
 macro_rules! operation {
     ($doc:literal, $f32:ident, $f64:ident, ($($arg:ident),+), $body:expr) => {
@@ -158,3 +169,44 @@ predicate!(
     (x, y),
     x.is_nan() | y.is_nan()
 );
+
+macro_rules! classification {
+    ($classify:ident, $signaling:ident, $kind:ident, $mask:ty) => {
+        /// Returns an `FP_*` category code for each lane with the input's element width.
+        ///
+        /// The codes are [`FP_NAN`], [`FP_INFINITE`], [`FP_ZERO`],
+        /// [`FP_SUBNORMAL`], and [`FP_NORMAL`].
+        /// Use `Simd::splat(FP_NORMAL as _)` to construct a comparison vector.
+        #[inline]
+        pub fn $classify<const N: usize>(x: Simd<$kind, N>) -> Simd<$mask, N> {
+            let category = x.simd_eq(Simd::splat(0.0)).select(
+                Simd::splat(FP_ZERO as $mask),
+                Simd::splat(FP_NORMAL as $mask),
+            );
+            let category = x
+                .is_subnormal()
+                .select(Simd::splat(FP_SUBNORMAL as $mask), category);
+            let category = x
+                .is_infinite()
+                .select(Simd::splat(FP_INFINITE as $mask), category);
+            x.is_nan().select(Simd::splat(FP_NAN as $mask), category)
+        }
+
+        /// Tests whether each lane is a signaling NaN by inspecting its bits.
+        #[inline]
+        pub fn $signaling<const N: usize>(x: Simd<$kind, N>) -> Mask<$mask, N> {
+            let bits = x.to_bits();
+            let exponent = $kind::INFINITY.to_bits();
+            // MANTISSA_DIGITS includes the implicit leading bit.
+            let mantissa = (1 << ($kind::MANTISSA_DIGITS - 1)) - 1;
+            // The highest stored mantissa bit identifies quiet NaNs.
+            let quiet = (mantissa + 1) >> 1;
+            let signaling = (bits & Simd::splat(exponent | quiet)).simd_eq(Simd::splat(exponent));
+            let payload = (bits & Simd::splat(mantissa)).simd_ne(Simd::splat(0));
+            signaling & payload
+        }
+    };
+}
+
+classification!(fpclassify_f32, issignaling_f32, f32, i32);
+classification!(fpclassify_f64, issignaling_f64, f64, i64);
