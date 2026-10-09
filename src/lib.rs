@@ -3,7 +3,8 @@
 //! Arithmetic assumes round-to-nearest, ties-to-even. Transcendental functions
 //! target at most 4 ULP; rounding, square root, fused multiply-add, and remainders
 //! target correctly rounded results. Tests cover signed zeros and exceptional
-//! values; floating-point exception flags and NaN payloads are not specified.
+//! values; floating-point exception flags are not specified. NaN payloads are
+//! specified only by the payload functions and `canonicalize`.
 #![feature(portable_simd)]
 
 mod backend;
@@ -16,6 +17,17 @@ pub use basic::{
     FP_NAN, FP_INFINITE, FP_ZERO, FP_SUBNORMAL, FP_NORMAL,
     fabs_f32, fabs_f64, copysign_f32, copysign_f64,
     fmin_f32, fmin_f64, fmax_f32, fmax_f64,
+    fdim_f32, fdim_f64,
+    fmaximum_f32, fmaximum_f64, fminimum_f32, fminimum_f64,
+    fmaximum_mag_f32, fmaximum_mag_f64, fminimum_mag_f32, fminimum_mag_f64,
+    fmaximum_num_f32, fmaximum_num_f64, fminimum_num_f32, fminimum_num_f64,
+    fmaximum_mag_num_f32, fmaximum_mag_num_f64,
+    fminimum_mag_num_f32, fminimum_mag_num_f64,
+    canonicalize_f32, canonicalize_f64,
+    getpayload_f32, getpayload_f64, setpayload_f32, setpayload_f64,
+    setpayloadsig_f32, setpayloadsig_f64,
+    nextup_f32, nextup_f64, nextdown_f32, nextdown_f64, nextafter_f32, nextafter_f64,
+    modf_f32, modf_f64,
     fpclassify_f32, fpclassify_f64,
     isfinite_f32, isfinite_f64, isinf_f32, isinf_f64,
     isnan_f32, isnan_f64, isnormal_f32, isnormal_f64,

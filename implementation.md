@@ -71,7 +71,7 @@
 | ✅ | `log2` |
 | ❌ | `log2p1` |
 | ❌ | `logb` |
-| ❌ | `modf` |
+| ✅ | `modf` |
 | ❌ | `scalbn` |
 | ❌ | `scalbln` |
 
@@ -133,27 +133,27 @@
 | --- | --- | --- |
 | ✅ | `copysign` | |
 | 🚫 | `nan` | Parses a string. |
-| ❌ | `nextafter` | |
+| ✅ | `nextafter` | |
 | 🚫 | `nexttoward` | Requires `long double`. |
-| ❌ | `nextup` | |
-| ❌ | `nextdown` | |
-| ❌ | `canonicalize` | |
+| ✅ | `nextup` | |
+| ✅ | `nextdown` | |
+| ✅ | `canonicalize` | Quiets signaling NaNs; preserves NaN signs and payloads. |
 
 ### 7.12.12 Maximum, minimum, and positive difference functions
 
 | Status | Function |
 | --- | --- |
-| ❌ | `fdim` |
+| ✅ | `fdim` |
 | ✅ | `fmax` |
 | ✅ | `fmin` |
-| ❌ | `fmaximum` |
-| ❌ | `fminimum` |
-| ❌ | `fmaximum_mag` |
-| ❌ | `fminimum_mag` |
-| ❌ | `fmaximum_num` |
-| ❌ | `fminimum_num` |
-| ❌ | `fmaximum_mag_num` |
-| ❌ | `fminimum_mag_num` |
+| ✅ | `fmaximum` |
+| ✅ | `fminimum` |
+| ✅ | `fmaximum_mag` |
+| ✅ | `fminimum_mag` |
+| ✅ | `fmaximum_num` |
+| ✅ | `fminimum_num` |
+| ✅ | `fmaximum_mag_num` |
+| ✅ | `fminimum_mag_num` |
 
 ### 7.12.13 Fused multiply-add
 
@@ -197,9 +197,11 @@
 
 | Status | Function |
 | --- | --- |
-| ❌ | `getpayload` |
-| ❌ | `setpayload` |
-| ❌ | `setpayloadsig` |
+| ✅ | `getpayload` |
+| ✅ | `setpayload` |
+| ✅ | `setpayloadsig` |
+
+The payload setters return `(value, success_mask)`; invalid lanes contain +0.
 
 ## Extensions
 
