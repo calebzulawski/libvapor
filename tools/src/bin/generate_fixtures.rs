@@ -115,7 +115,7 @@ fn new_inputs(width: Width, op: &str) -> Vec<[u64; 3]> {
     if matches!(op, "pown" | "compoundn") {
         // Small-exponent dispatch boundaries, including bases whose rounded
         // 1+x is on a boundary while its compensated low part is nonzero.
-        for base in [1.0 / 65536.0, 0.125, 1.0, 4.0, 65536.0] {
+        for base in [1.0 / 65536.0, 1.0 / 128.0, 0.125, 1.0, 4.0, 128.0, 65536.0] {
             for sign in [-1.0, 1.0] {
                 let x = if op == "pown" {
                     sign * base
@@ -129,7 +129,8 @@ fn new_inputs(width: Width, op: &str) -> Vec<[u64; 3]> {
                         Width::F64 => center.wrapping_add_signed(offset as i64),
                     };
                     for n in [
-                        -33_i64, -32, -31, -17, -16, -15, -1, 0, 1, 15, 16, 17, 31, 32, 33,
+                        -129_i64, -128, -127, -65, -64, -63, -33, -32, -31, -17, -16, -15, -1, 0,
+                        1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129,
                     ] {
                         inputs.push([bits, n as u64, 0]);
                     }
@@ -148,6 +149,7 @@ fn new_inputs(width: Width, op: &str) -> Vec<[u64; 3]> {
                 -0.875 + 4.875 * unit
             };
             inputs.push([width.bits(x), (i as i64 % 65 - 32) as u64, 0]);
+            inputs.push([width.bits(x), (i as i64 % 257 - 128) as u64, 0]);
         }
     }
     if matches!(op, "pown" | "compoundn") {

@@ -33,19 +33,27 @@ use crate::precision::{exp_value, log1p_dd, log_float_dd, madd, Dd};
 use core::simd::prelude::*;
 
 // Binary exponentiation is a project extension of the SLEEF-derived kernels.
-// Restrict this path to |n| <= 32 and 2^-16 <= base <= 2^16: every
-// intermediate and its reciprocal stays normal, with room for compensation.
+// Bounds keep selected powers and reciprocals normal: |n| <= 32 uses
+// 2^-16 <= base <= 2^16; |n| <= 128 uses 2^-7 <= base <= 2^7.
 #[inline]
-fn small_power_domain<const N: usize>(base: Simd<f64, N>, n: Simd<i64, N>) -> bool {
-    (base.simd_ge(Simd::splat(1.0 / 65536.0))
-        & base.simd_le(Simd::splat(65536.0))
-        & n.simd_ge(Simd::splat(-32))
-        & n.simd_le(Simd::splat(32)))
+fn small_power_domain<const N: usize, const MAX: u32>(base: Simd<f64, N>, n: Simd<i64, N>) -> bool {
+    if MAX != 32 {
+        return (n.simd_ge(Simd::splat(-(MAX as i64))) & n.simd_le(Simd::splat(MAX as i64))).all()
+            && (base.simd_ge(Simd::splat(1.0 / 128.0)) & base.simd_le(Simd::splat(128.0))).all();
+    }
+    let bound = if MAX == 32 { 65536.0 } else { 128.0 };
+    (base.simd_ge(Simd::splat(1.0 / bound))
+        & base.simd_le(Simd::splat(bound))
+        & n.simd_ge(Simd::splat(-(MAX as i64)))
+        & n.simd_le(Simd::splat(MAX as i64)))
     .all()
 }
 
 #[inline]
-fn small_power_dd<const N: usize>(mut base: Dd<N>, n: Simd<i64, N>) -> Simd<f64, N> {
+fn small_power_dd<const N: usize, const MAX: u32>(
+    mut base: Dd<N>,
+    n: Simd<i64, N>,
+) -> Simd<f64, N> {
     let negative = n.simd_lt(Simd::splat(0));
     let bits = negative.select(-n, n).cast::<u32>();
     let mut result = Dd::select(
@@ -53,8 +61,8 @@ fn small_power_dd<const N: usize>(mut base: Dd<N>, n: Simd<i64, N>) -> Simd<f64,
         base,
         Dd::splat(1.0, 0.0),
     );
-    for bit in [2, 4, 8, 16, 32] {
-        if bits.simd_lt(Simd::splat(bit)).all() {
+    for bit in [2, 4, 8, 16, 32, 64, 128] {
+        if bit > MAX || bits.simd_lt(Simd::splat(bit)).all() {
             break;
         }
         base = base.square().normalize();
@@ -78,8 +86,9 @@ fn small_power_dd<const N: usize>(mut base: Dd<N>, n: Simd<i64, N>) -> Simd<f64,
     negative.select(reciprocal, result.value())
 }
 
-// At most 32 ordinary double-precision multiplications leave a generous
-// margin before rounding to f32; no compensated products are needed here.
+// Double products retain ample precision for f32 through |n| = 128.
+// A selected power outside f64's range also puts the f32 result outside
+// its finite nonzero range, including reciprocal powers.
 #[inline]
 fn small_power_f32<const N: usize>(mut base: Simd<f64, N>, n: Simd<i64, N>) -> Simd<f64, N> {
     let negative = n.simd_lt(Simd::splat(0));
@@ -88,7 +97,7 @@ fn small_power_f32<const N: usize>(mut base: Simd<f64, N>, n: Simd<i64, N>) -> S
         .simd_ne(Simd::splat(0))
         .cast::<i64>()
         .select(base, Simd::splat(1.0));
-    for bit in [2, 4, 8, 16, 32] {
+    for bit in [2, 4, 8, 16, 32, 64, 128] {
         if bits.simd_lt(Simd::splat(bit)).all() {
             break;
         }
@@ -124,8 +133,11 @@ fn integer_dd<const N: usize>(n: Simd<i64, N>) -> Dd<N> {
 /// Negative bases and signed zeros retain their sign for odd n; n=0 returns 1.
 #[inline]
 pub fn pown_f64<const N: usize>(x: Simd<f64, N>, n: Simd<i64, N>) -> Simd<f64, N> {
-    if small_power_domain(x.abs(), n) {
-        return power_sign(x, n, small_power_dd(Dd::from(x.abs()), n));
+    if small_power_domain::<N, 32>(x.abs(), n) {
+        return power_sign(x, n, small_power_dd::<N, 32>(Dd::from(x.abs()), n));
+    }
+    if small_power_domain::<N, 128>(x.abs(), n) {
+        return pown_medium::<N>(x, n);
     }
     pown_large_f64(x, n)
 }
@@ -165,9 +177,8 @@ fn finish_pown<const N: usize>(
 /// Negative bases and signed zeros retain their sign for odd n; n=0 returns 1.
 #[inline]
 pub fn pown_f32<const N: usize>(x: Simd<f32, N>, n: Simd<i64, N>) -> Simd<f32, N> {
-    let a = x.abs().cast::<f64>();
-    if small_power_domain(a, n) {
-        let magnitude = small_power_f32(a, n).cast::<f32>();
+    if (n.simd_ge(Simd::splat(-128)) & n.simd_le(Simd::splat(128))).all() {
+        let magnitude = small_power_f32(x.abs().cast(), n).cast::<f32>();
         let negative =
             x.is_sign_negative() & (n & Simd::splat(1)).simd_ne(Simd::splat(0)).cast::<i32>();
         return negative.select(-magnitude, magnitude);
@@ -249,8 +260,11 @@ pub fn rootn_f32<const N: usize>(x: Simd<f32, N>, n: Simd<i64, N>) -> Simd<f32, 
 #[inline]
 pub fn compoundn_f64<const N: usize>(x: Simd<f64, N>, n: Simd<i64, N>) -> Simd<f64, N> {
     let base = Dd::from(x).add_float(Simd::splat(1.0)).normalize();
-    if small_power_domain(base.hi, n) {
-        return small_power_dd(base, n);
+    if small_power_domain::<N, 32>(base.hi, n) {
+        return small_power_dd::<N, 32>(base, n);
+    }
+    if small_power_domain::<N, 128>(base.hi, n) {
+        return compoundn_medium::<N>(x, n);
     }
     compoundn_large_f64(x, n)
 }
@@ -286,12 +300,13 @@ fn finish_compoundn<const N: usize>(
 /// Retains small x even when 1+x rounds to 1. Inputs below -1 give NaN.
 #[inline]
 pub fn compoundn_f32<const N: usize>(x: Simd<f32, N>, n: Simd<i64, N>) -> Simd<f32, N> {
-    let x = x.cast::<f64>();
-    let base = x + Simd::splat(1.0);
-    if small_power_domain(base, n) {
-        return small_power_f32(base, n).cast();
+    if (n.simd_ge(Simd::splat(-128)) & n.simd_le(Simd::splat(128))).all() {
+        let result = small_power_f32(x.cast::<f64>() + Simd::splat(1.0), n).cast();
+        return x
+            .simd_lt(Simd::splat(-1.0))
+            .select(Simd::splat(f32::NAN), result);
     }
-    compoundn_large_f32(x, n).cast()
+    compoundn_large_f32(x.cast(), n).cast()
 }
 
 #[inline(never)]
@@ -299,4 +314,17 @@ fn compoundn_large_f32<const N: usize>(x: Simd<f64, N>, n: Simd<i64, N>) -> Simd
     let regular = x.is_finite() & x.simd_gt(Simd::splat(-1.0));
     let a = regular.select(x, Simd::splat(0.0));
     finish_compoundn(x, n, crate::exp_f64(crate::log1p_f64(a) * n.cast::<f64>()))
+}
+
+#[cold]
+#[inline(never)]
+fn pown_medium<const N: usize>(x: Simd<f64, N>, n: Simd<i64, N>) -> Simd<f64, N> {
+    power_sign(x, n, small_power_dd::<N, 128>(Dd::from(x.abs()), n))
+}
+
+#[cold]
+#[inline(never)]
+fn compoundn_medium<const N: usize>(x: Simd<f64, N>, n: Simd<i64, N>) -> Simd<f64, N> {
+    let base = Dd::from(x).add_float(Simd::splat(1.0)).normalize();
+    small_power_dd::<N, 128>(base, n)
 }

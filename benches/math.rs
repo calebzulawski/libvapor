@@ -35,13 +35,13 @@ fn inputs<const N: usize>(min: f64, max: f64, seed: u64) -> [[f64; N]; BATCH_SIZ
 // The same loop handles unary, binary, ternary, and paired-output operations.
 macro_rules! benchmark {
     ($name:ident, ($($arg:ident $( : $arg_type:ty)?),+), $scalar:ident, $min:expr, $max:expr) => {
-        benchmark!($name => $name, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, -16.0, 16.0);
+        benchmark!($name, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, -16.0, 16.0);
     };
-    ($name:ident => $function:ident, ($($arg:ident $( : $arg_type:ty)?),+), $scalar:ident, $min:expr, $max:expr, $nmin:expr, $nmax:expr) => {
-        benchmark!(@kind $name, $function, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, $nmin, $nmax, f32, 16);
-        benchmark!(@kind $name, $function, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, $nmin, $nmax, f64, 8);
+    ($name:ident, ($($arg:ident $( : $arg_type:ty)?),+), $scalar:ident, $min:expr, $max:expr, $nmin:expr, $nmax:expr) => {
+        benchmark!(@kind $name, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, $nmin, $nmax, f32, 16);
+        benchmark!(@kind $name, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, $nmin, $nmax, f64, 8);
     };
-    (@kind $name:ident, $function:ident, ($($arg:ident $( : $arg_type:ty)?),+), $scalar:ident, $min:expr, $max:expr, $nmin:expr, $nmax:expr, $kind:ident, $lanes:literal) => {
+    (@kind $name:ident, ($($arg:ident $( : $arg_type:ty)?),+), $scalar:ident, $min:expr, $max:expr, $nmin:expr, $nmax:expr, $kind:ident, $lanes:literal) => {
         paste::paste! {
             mod [<$name _ $kind x $lanes>] {
                 use super::*;
@@ -56,7 +56,7 @@ macro_rules! benchmark {
                     b.iter(|| {
                         for batch in 0..BATCH_SIZE {
                             $(let $arg = black_box(&$arg[batch]);)+
-                            benchmark!(@scalar_output $function, $kind, $lanes, $scalar, ($($arg),+));
+                            benchmark!(@scalar_output $name, $kind, $lanes, $scalar, ($($arg),+));
                         }
                     });
                 }
@@ -71,7 +71,7 @@ macro_rules! benchmark {
                     b.iter(|| {
                         for batch in 0..BATCH_SIZE {
                             $(let $arg = black_box(&$arg[batch]);)+
-                            benchmark!(@output $function, mwise::[<$function _ $kind>]($(*$arg),+));
+                            benchmark!(@output $name, mwise::[<$name _ $kind>]($(*$arg),+));
                         }
                     });
                 }
@@ -199,13 +199,9 @@ benchmark!(exp2, (x), exp2, -10.0, 10.0);
 benchmark!(expm1, (x), exp_m1, -10.0, 10.0);
 benchmark!(pow, (x, y), powf, 0.125, 4.0);
 benchmark!(powr, (x, y), powf, 0.125, 4.0);
-benchmark!(pown, (x, n: i64), powi, -4.0, 4.0);
+benchmark!(pown, (x, n: i64), powi, -4.0, 4.0, -128.0, 129.0);
 benchmark!(rootn, (x, n: i64), powf, 0.125, 256.0);
-benchmark!(compoundn, (x, n: i64), powi, -0.875, 4.0);
-// Larger exponents force the generic kernels, with bases close enough to one
-// to exercise finite results as well as overflow and underflow.
-benchmark!(pown_large => pown, (x, n: i64), powi, 0.999, 1.001, -1.0e6, 1.0e6);
-benchmark!(compoundn_large => compoundn, (x, n: i64), powi, -0.001, 0.001, -1.0e6, 1.0e6);
+benchmark!(compoundn, (x, n: i64), powi, -0.875, 4.0, -128.0, 129.0);
 benchmark!(log, (x), ln, 0.125, 256.0);
 benchmark!(log2, (x), log2, 0.125, 256.0);
 benchmark!(log10, (x), log10, 0.125, 256.0);

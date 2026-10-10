@@ -46,10 +46,20 @@ fn input_strategy(width: Width, op: &str) -> BoxedStrategy<[u64; 3]> {
     if matches!(op, "pown" | "rootn" | "compoundn") {
         let exponent = prop_oneof![
             any::<i64>(),
-            -34_i64..=34,
+            -130_i64..=130,
             proptest::sample::select(vec![
                 i64::MIN,
                 i64::MAX,
+                -129,
+                -128,
+                -127,
+                -33,
+                -32,
+                32,
+                33,
+                127,
+                128,
+                129,
                 (1_i64 << 53) - 1,
                 (1_i64 << 53) + 1
             ]),
