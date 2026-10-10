@@ -1,4 +1,4 @@
-- [Linux x86-64](https://calebzulawski.github.io/libvapor/benchmarks/ubuntu-24.04.png)
-- [Linux ARM64](https://calebzulawski.github.io/libvapor/benchmarks/ubuntu-24.04-arm.png)
-- [macOS](https://calebzulawski.github.io/libvapor/benchmarks/macos-15.png)
-- [WASM on x86 Linux](https://calebzulawski.github.io/libvapor/benchmarks/wasm32-wasip1.png)
+- [Linux x86-64](https://calebzulawski.github.io/mwise/benchmarks/ubuntu-24.04.png)
+- [Linux ARM64](https://calebzulawski.github.io/mwise/benchmarks/ubuntu-24.04-arm.png)
+- [macOS](https://calebzulawski.github.io/mwise/benchmarks/macos-15.png)
+- [WASM on x86 Linux](https://calebzulawski.github.io/mwise/benchmarks/wasm32-wasip1.png)
