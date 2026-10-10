@@ -15,8 +15,8 @@ from matplotlib.ticker import MaxNLocator
 OPERATIONS = [
     "trunc", "floor", "ceil", "round", "roundeven", "lround", "llround",
     "fmod", "remainder", "remquo",
-    "sqrt", "cbrt", "hypot", "fma",
-    "exp", "exp2", "expm1", "pow", "log", "log2", "log10", "log1p",
+    "sqrt", "rsqrt", "cbrt", "hypot", "fma",
+    "exp", "exp2", "expm1", "pow", "powr", "pown", "pown_large", "rootn", "compoundn", "compoundn_large", "log", "log2", "log10", "log1p",
     "sin", "cos", "sincos", "tan", "asin", "acos", "atan", "atan2",
     "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
     "erf", "erfc", "lgamma", "tgamma",

@@ -11,6 +11,11 @@ const NEW_OPERATIONS: &[&str] = &[
     "hypot",
     "expm1",
     "pow",
+    "powr",
+    "pown",
+    "rootn",
+    "compoundn",
+    "rsqrt",
     "sinh",
     "cosh",
     "tanh",
@@ -83,7 +88,7 @@ fn new_inputs(width: Width, op: &str) -> Vec<[u64; 3]> {
         710.4758600739439,
     ];
     let mut inputs = Vec::new();
-    if op == "pow" {
+    if matches!(op, "pow" | "powr") {
         // Exercise the compensated logarithm's interval boundaries with
         // exponents large enough to amplify reduction errors, including
         // bases adjacent to one and outputs near underflow and overflow.
@@ -105,6 +110,74 @@ fn new_inputs(width: Width, op: &str) -> Vec<[u64; 3]> {
                     }
                 }
             }
+        }
+    }
+    if matches!(op, "pown" | "compoundn") {
+        // Small-exponent dispatch boundaries, including bases whose rounded
+        // 1+x is on a boundary while its compensated low part is nonzero.
+        for base in [1.0 / 65536.0, 0.125, 1.0, 4.0, 65536.0] {
+            for sign in [-1.0, 1.0] {
+                let x = if op == "pown" {
+                    sign * base
+                } else {
+                    base - 1.0
+                };
+                let center = width.bits(x);
+                for offset in [-1, 0, 1] {
+                    let bits = match width {
+                        Width::F32 => (center as u32).wrapping_add_signed(offset) as u64,
+                        Width::F64 => center.wrapping_add_signed(offset as i64),
+                    };
+                    for n in [
+                        -33_i64, -32, -31, -17, -16, -15, -1, 0, 1, 15, 16, 17, 31, 32, 33,
+                    ] {
+                        inputs.push([bits, n as u64, 0]);
+                    }
+                }
+            }
+        }
+        // Consecutive finite small-exponent cases exercise the multiplication
+        // path with mixed exponents at every vector width in the fixture tests.
+        let mut state = 0x243f6a8885a308d3_u64;
+        for i in 0..1024 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let unit = (state >> 11) as f64 / (1_u64 << 53) as f64;
+            let x = if op == "pown" {
+                (0.03125 + 15.96875 * unit) * if i % 2 == 0 { 1.0 } else { -1.0 }
+            } else {
+                -0.875 + 4.875 * unit
+            };
+            inputs.push([width.bits(x), (i as i64 % 65 - 32) as u64, 0]);
+        }
+    }
+    if matches!(op, "pown" | "compoundn") {
+        // Amplify low bits near one, including a 1+x that rounds to one.
+        for power in [24, 53, 63, 64] {
+            let delta = 2.0_f64.powi(-power);
+            for x in [delta, -delta] {
+                let x = if op == "pown" { 1.0 + x } else { x };
+                let bits = width.bits(x);
+                for n in [
+                    i64::MIN,
+                    i64::MAX,
+                    (1_i64 << 62) + 1,
+                    (1_i64 << 61) + 1,
+                    (1_i64 << 53) + 1,
+                    1000,
+                    -1000,
+                ] {
+                    inputs.push([bits, n as u64, 0]);
+                }
+            }
+        }
+    }
+    if op == "compoundn" {
+        // Cancellation in the compensated logarithm must retain its denominator correction.
+        for x in [
+            f64::from_bits(0xbc6c3ee954000000),
+            f64::from_bits(0xbc7de90f13ffffff),
+        ] {
+            inputs.push([width.bits(x), i64::MAX as u64, 0]);
         }
     }
     if matches!(op, "fmod" | "remainder") {
@@ -151,7 +224,25 @@ fn new_inputs(width: Width, op: &str) -> Vec<[u64; 3]> {
                 Width::F32 => (bits as u32).wrapping_add_signed(offset) as u64,
                 Width::F64 => bits.wrapping_add_signed(offset as i64),
             };
-            if matches!(op, "pow" | "hypot" | "fmod" | "remainder") {
+            if matches!(op, "pown" | "rootn" | "compoundn") {
+                for n in [
+                    i64::MIN,
+                    i64::MAX,
+                    -(1_i64 << 53) - 1,
+                    (1_i64 << 53) + 1,
+                    -1000,
+                    -3,
+                    -2,
+                    -1,
+                    0,
+                    1,
+                    2,
+                    3,
+                    1000,
+                ] {
+                    inputs.push([bits, n as u64, 0]);
+                }
+            } else if matches!(op, "pow" | "powr" | "hypot" | "fmod" | "remainder") {
                 for y in [
                     -maximum,
                     -3.0,
@@ -190,7 +281,13 @@ fn new_inputs(width: Width, op: &str) -> Vec<[u64; 3]> {
             }
         };
         let x = sample();
-        let y = if matches!(op, "pow" | "hypot" | "fmod" | "remainder") {
+        let y = if matches!(op, "pown" | "rootn" | "compoundn") {
+            if i % 2 == 0 {
+                (i as i64 % 33 - 16) as u64
+            } else {
+                sample()
+            }
+        } else if matches!(op, "pow" | "powr" | "hypot" | "fmod" | "remainder") {
             sample()
         } else {
             0

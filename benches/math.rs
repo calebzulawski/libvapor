@@ -34,44 +34,79 @@ fn inputs<const N: usize>(min: f64, max: f64, seed: u64) -> [[f64; N]; BATCH_SIZ
 
 // The same loop handles unary, binary, ternary, and paired-output operations.
 macro_rules! benchmark {
-    ($name:ident, ($($arg:ident),+), $scalar:ident, $min:expr, $max:expr) => {
-        benchmark!(@kind $name, ($($arg),+), $scalar, $min, $max, f32, 16);
-        benchmark!(@kind $name, ($($arg),+), $scalar, $min, $max, f64, 8);
+    ($name:ident, ($($arg:ident $( : $arg_type:ty)?),+), $scalar:ident, $min:expr, $max:expr) => {
+        benchmark!($name => $name, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, -16.0, 16.0);
     };
-    (@kind $name:ident, ($($arg:ident),+), $scalar:ident, $min:expr, $max:expr, $kind:ident, $lanes:literal) => {
+    ($name:ident => $function:ident, ($($arg:ident $( : $arg_type:ty)?),+), $scalar:ident, $min:expr, $max:expr, $nmin:expr, $nmax:expr) => {
+        benchmark!(@kind $name, $function, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, $nmin, $nmax, f32, 16);
+        benchmark!(@kind $name, $function, ($($arg $( : $arg_type)?),+), $scalar, $min, $max, $nmin, $nmax, f64, 8);
+    };
+    (@kind $name:ident, $function:ident, ($($arg:ident $( : $arg_type:ty)?),+), $scalar:ident, $min:expr, $max:expr, $nmin:expr, $nmax:expr, $kind:ident, $lanes:literal) => {
         paste::paste! {
             mod [<$name _ $kind x $lanes>] {
                 use super::*;
 
                 #[bench]
                 fn scalar(b: &mut Bencher) {
-                    let [$($arg),+] = std::array::from_fn(|column| {
-                        inputs::<$lanes>($min, $max, column as u64 + 1)
-                            .map(|batch| Simd::from_array(batch.map(|x| x as $kind)))
-                    });
+                    let mut columns = 0..;
+                    $(let $arg = {
+                        let column = columns.next().unwrap();
+                        benchmark!(@inputs $kind, $lanes, $min, $max, $nmin, $nmax, column $(, $arg_type)?)
+                    };)+
                     b.iter(|| {
                         for batch in 0..BATCH_SIZE {
                             $(let $arg = black_box(&$arg[batch]);)+
-                            benchmark!(@scalar_output $name, $kind, $lanes, $scalar, ($($arg),+));
+                            benchmark!(@scalar_output $function, $kind, $lanes, $scalar, ($($arg),+));
                         }
                     });
                 }
 
                 #[bench]
                 fn vector(b: &mut Bencher) {
-                    let [$($arg),+] = std::array::from_fn(|column| {
-                        inputs::<$lanes>($min, $max, column as u64 + 1)
-                            .map(|batch| Simd::from_array(batch.map(|x| x as $kind)))
-                    });
+                    let mut columns = 0..;
+                    $(let $arg = {
+                        let column = columns.next().unwrap();
+                        benchmark!(@inputs $kind, $lanes, $min, $max, $nmin, $nmax, column $(, $arg_type)?)
+                    };)+
                     b.iter(|| {
                         for batch in 0..BATCH_SIZE {
                             $(let $arg = black_box(&$arg[batch]);)+
-                            benchmark!(@output $name, mwise::[<$name _ $kind>]($(*$arg),+));
+                            benchmark!(@output $function, mwise::[<$function _ $kind>]($(*$arg),+));
                         }
                     });
                 }
             }
         }
+    };
+    (@inputs $kind:ident, $lanes:literal, $min:expr, $max:expr, $nmin:expr, $nmax:expr, $column:ident) => {
+        inputs::<$lanes>($min, $max, $column as u64 + 1)
+            .map(|batch| Simd::from_array(batch.map(|x| x as $kind)))
+    };
+    (@inputs $kind:ident, $lanes:literal, $min:expr, $max:expr, $nmin:expr, $nmax:expr, $column:ident, $arg_type:ty) => {
+        inputs::<$lanes>($nmin, $nmax, $column as u64 + 1)
+            .map(|batch| Simd::from_array(batch.map(|x| x as $arg_type)))
+    };
+    (@scalar_output rsqrt, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
+            1.0 / $x[lane].sqrt()
+        })))
+    };
+    (@scalar_output pown, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident, $n:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
+            // The benchmark's integer range fits the scalar powi API.
+            $x[lane].powi($n[lane] as i32)
+        })))
+    };
+    (@scalar_output rootn, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident, $n:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
+            if $n[lane] == 0 { $kind::NAN }
+            else { $x[lane].powf(1.0 / $n[lane] as $kind) }
+        })))
+    };
+    (@scalar_output compoundn, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident, $n:ident)) => {
+        black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
+            (1.0 + $x[lane]).powi($n[lane] as i32)
+        })))
     };
     (@scalar_output fmod, $kind:ident, $lanes:literal, $scalar:ident, ($x:ident, $y:ident)) => {
         black_box(Aligned(std::array::from_fn::<_, $lanes, _>(|lane| {
@@ -155,6 +190,7 @@ benchmark!(fmod, (x, y), fmod, -16.0, 16.0);
 benchmark!(remainder, (x, y), remainder, -16.0, 16.0);
 benchmark!(remquo, (x, y), remquo, -16.0, 16.0);
 benchmark!(sqrt, (x), sqrt, 0.125, 256.0);
+benchmark!(rsqrt, (x), sqrt, 0.125, 256.0);
 benchmark!(cbrt, (x), cbrt, -16.0, 16.0);
 benchmark!(hypot, (x, y), hypot, -16.0, 16.0);
 benchmark!(fma, (x, y, z), mul_add, -16.0, 16.0);
@@ -162,6 +198,14 @@ benchmark!(exp, (x), exp, -10.0, 10.0);
 benchmark!(exp2, (x), exp2, -10.0, 10.0);
 benchmark!(expm1, (x), exp_m1, -10.0, 10.0);
 benchmark!(pow, (x, y), powf, 0.125, 4.0);
+benchmark!(powr, (x, y), powf, 0.125, 4.0);
+benchmark!(pown, (x, n: i64), powi, -4.0, 4.0);
+benchmark!(rootn, (x, n: i64), powf, 0.125, 256.0);
+benchmark!(compoundn, (x, n: i64), powi, -0.875, 4.0);
+// Larger exponents force the generic kernels, with bases close enough to one
+// to exercise finite results as well as overflow and underflow.
+benchmark!(pown_large => pown, (x, n: i64), powi, 0.999, 1.001, -1.0e6, 1.0e6);
+benchmark!(compoundn_large => compoundn, (x, n: i64), powi, -0.001, 0.001, -1.0e6, 1.0e6);
 benchmark!(log, (x), ln, 0.125, 256.0);
 benchmark!(log2, (x), log2, 0.125, 256.0);
 benchmark!(log10, (x), log10, 0.125, 256.0);

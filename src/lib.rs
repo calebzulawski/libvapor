@@ -54,7 +54,7 @@ mod remainder;
 pub use remainder::{fmod_f32, fmod_f64, remainder_f32, remainder_f64, remquo_f32, remquo_f64};
 
 mod sqrt;
-pub use sqrt::{sqrt_f32, sqrt_f64};
+pub use sqrt::{rsqrt_f32, rsqrt_f64, sqrt_f32, sqrt_f64};
 
 mod cbrt;
 pub use cbrt::{cbrt_f32, cbrt_f64};
@@ -73,7 +73,11 @@ mod expm1;
 pub use expm1::{expm1_f32, expm1_f64};
 
 mod pow;
-pub use pow::{pow_f32, pow_f64};
+#[rustfmt::skip]
+pub use pow::{
+    pow_f32, pow_f64, powr_f32, powr_f64,
+    pown_f32, pown_f64, rootn_f32, rootn_f64, compoundn_f32, compoundn_f64,
+};
 
 mod log;
 #[rustfmt::skip]

@@ -1,5 +1,6 @@
-//! Real powers, with compensated logarithm and exponential kernels.
-// Derived from SLEEF src/libm/sleefsimddp.c (xpow), with changes.
+//! Real and integer powers, roots, and compounding with compensated kernels.
+// Derived from SLEEF src/libm/sleefsimddp.c (xpow), with changes and
+// extended for integer powers, roots, and compounding.
 // Copyright Naoki Shibata and contributors 2010 - 2025.
 // SPDX-License-Identifier: MIT AND BSL-1.0
 
@@ -28,6 +29,12 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
+mod integer;
+pub use integer::{compoundn_f32, compoundn_f64, pown_f32, pown_f64, rootn_f32, rootn_f64};
+
+mod powr;
+pub use powr::{powr_f32, powr_f64};
 
 use crate::precision::{exp_value, log_float_dd};
 use core::simd::prelude::*;

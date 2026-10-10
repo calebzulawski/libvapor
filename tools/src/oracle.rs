@@ -2,12 +2,22 @@
 
 use crate::{Case, Width};
 use rug::ops::{PowAssignRound, RemAssignRound};
-use rug::{float::Round, Float};
+use rug::Assign;
+use rug::{
+    float::{Round, Special},
+    Float,
+};
 
 pub const PRECISION: u32 = 768;
 
 fn reference(op: &str, width: Width, input: [u64; 3], rounding: Round) -> Float {
-    let [mut x, y, _] = input.map(|bits| Float::with_val(PRECISION, width.value(bits)));
+    let mut x = Float::with_val(PRECISION, width.value(input[0]));
+    let n = input[1] as i64;
+    let y = if matches!(op, "pown" | "rootn" | "compoundn") {
+        Float::with_val(PRECISION, n)
+    } else {
+        Float::with_val(PRECISION, width.value(input[1]))
+    };
     match op {
         "fmod" => {
             x.rem_assign_round(&y, rounding);
@@ -30,8 +40,67 @@ fn reference(op: &str, width: Width, input: [u64; 3], rounding: Round) -> Float 
         "expm1" => {
             x.exp_m1_round(rounding);
         }
-        "pow" => {
+        "pow" | "pown" => {
             x.pow_assign_round(&y, rounding);
+        }
+        "powr" => {
+            if x.is_nan()
+                || y.is_nan()
+                || x < 0
+                || ((x.is_zero() || x.is_infinite()) && y.is_zero())
+                || (x == 1 && y.is_infinite())
+            {
+                x.assign(Special::Nan);
+            } else {
+                // powr treats both signed zeros as a nonnegative base.
+                x.abs_mut();
+                x.pow_assign_round(&y, rounding);
+            }
+        }
+        "rootn" => {
+            if let Ok(n) = i32::try_from(n) {
+                x.root_i_round(n, rounding);
+            } else {
+                let negative = x.is_sign_negative() && n & 1 != 0;
+                if x < 0 && n & 1 == 0 {
+                    x.assign(Special::Nan);
+                } else {
+                    x.abs_mut();
+                    let exponent = Float::with_val(PRECISION, y.recip_ref());
+                    // An odd negative root reverses the directed magnitude rounding.
+                    let magnitude_round = if negative {
+                        match rounding {
+                            Round::Down => Round::Up,
+                            Round::Up => Round::Down,
+                            other => other,
+                        }
+                    } else {
+                        rounding
+                    };
+                    x.pow_assign_round(&exponent, magnitude_round);
+                    if negative {
+                        x = -x;
+                    }
+                }
+            }
+        }
+        "compoundn" => {
+            if let Ok(n) = i32::try_from(n) {
+                x.compound_i_round(n, rounding);
+            } else if x < -1 {
+                x.assign(Special::Nan);
+            } else {
+                x += 1;
+                x.pow_assign_round(&y, rounding);
+            }
+        }
+        "rsqrt" => {
+            // MPFR returns +inf for -0; C23 preserves the zero's sign.
+            if x.is_zero() && x.is_sign_negative() {
+                x.assign(Special::NegInfinity);
+            } else {
+                x.recip_sqrt_round(rounding);
+            }
         }
         "log" => {
             x.ln_round(rounding);

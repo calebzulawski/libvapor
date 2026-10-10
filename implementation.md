@@ -80,14 +80,14 @@
 | Status | Function |
 | --- | --- |
 | ✅ | `cbrt` |
-| ❌ | `compoundn` |
+| ✅ | `compoundn` |
 | ✅ | `fabs` |
 | ✅ | `hypot` |
 | ✅ | `pow` |
-| ❌ | `pown` |
-| ❌ | `powr` |
-| ❌ | `rootn` |
-| ❌ | `rsqrt` |
+| ✅ | `pown` |
+| ✅ | `powr` |
+| ✅ | `rootn` |
+| ✅ | `rsqrt` |
 | ✅ | `sqrt` |
 
 ### 7.12.8 Error and gamma functions

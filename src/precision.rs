@@ -223,6 +223,23 @@ pub(crate) fn log_dd<const N: usize>(d: Dd<N>) -> Dd<N> {
     }
 }
 
+/// Compensated ln(1+x), retaining the addition's low part near zero.
+#[inline]
+pub(crate) fn log1p_dd<const N: usize>(x: Simd<f64, N>) -> Dd<N> {
+    let d = Dd::from(x).add_float(Simd::splat(1.0)).normalize();
+    if crate::backend::use_hardware_fma_f64::<N>() {
+        log_series_dd::<N, true>(d)
+    } else {
+        // log(hi+lo) = log(hi) + log1p(lo/hi). The normalized low part
+        // is at most half an ulp. Retain its quadratic term: a large n
+        // can amplify it even when the original 1+x rounds to one.
+        let z = Dd::from(d.lo).div(Dd::from(d.hi)).normalize();
+        log_table_dd(d.hi)
+            .add(z.sub(z.square().scale(Simd::splat(0.5))))
+            .normalize()
+    }
+}
+
 /// Table reduction for a positive finite floating input. The two intervals
 /// next to one have reciprocal 1, preserving tiny logarithms for pow.
 #[inline]
@@ -300,7 +317,10 @@ fn log_series_dd<const N: usize, const LOW: bool>(d: Dd<N>) -> Dd<N> {
     let e = e - upper.select(Simd::splat(1), Simd::splat(0));
     let z = if LOW {
         let m = Dd::new(m, scale(d.lo, -e));
+        // Near one the numerator can live entirely in the low component.
+        // Normalize before dividing so the denominator correction is retained.
         m.add_float(Simd::splat(-1.0))
+            .normalize()
             .div(m.add_float(Simd::splat(1.0)))
     } else {
         Dd::from(m - Simd::splat(1.0)).div(Dd::from(m).add_float(Simd::splat(1.0)))

@@ -23,3 +23,17 @@ pub fn sqrt_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
         software::sqrt_f64(x)
     }
 }
+
+/// Computes the reciprocal square root for each lane, targeting at most 4 ULP.
+/// Signed zeros give signed infinities; negative inputs give NaN.
+#[inline]
+pub fn rsqrt_f32<const N: usize>(x: Simd<f32, N>) -> Simd<f32, N> {
+    Simd::splat(1.0) / sqrt_f32(x)
+}
+
+/// Computes the reciprocal square root for each lane, targeting at most 4 ULP.
+/// Signed zeros give signed infinities; negative inputs give NaN.
+#[inline]
+pub fn rsqrt_f64<const N: usize>(x: Simd<f64, N>) -> Simd<f64, N> {
+    Simd::splat(1.0) / sqrt_f64(x)
+}

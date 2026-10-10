@@ -32,15 +32,17 @@ pub fn check_bounds(width: Width, op: &str, output: usize, lane: usize, got: f64
 #[macro_export]
 macro_rules! check_accuracy {
     ($kind:ident, $width:ident, $lanes:expr, $cases:expr, $function:path,
-        ($($arg:ident),+) => $outputs:expr) => {{
+        ($($arg:ident $( : $arg_type:ty)?),+) => $outputs:expr) => {{
         let cases = $cases;
         assert!(!cases.is_empty(), "{}: no reference cases", stringify!($function));
         for batch in cases.chunks($lanes) {
-            let [$($arg),+] = std::array::from_fn(|column| {
-                std::simd::Simd::<$kind, { $lanes }>::from_array(std::array::from_fn(|lane| {
-                    $kind::from_bits(batch[lane % batch.len()].input[column].try_into().unwrap())
+            let mut columns = 0..;
+            $(let $arg = {
+                let column = columns.next().unwrap();
+                std::simd::Simd::<_, { $lanes }>::from_array(std::array::from_fn(|lane| {
+                    $crate::check_accuracy!(@input $kind; batch[lane % batch.len()].input[column] $(, $arg_type)?)
                 }))
-            });
+            };)+
             let outputs = ($outputs)($function($($arg),+)).map(std::simd::Simd::to_array);
             // Partial vectors repeat valid cases; every lane is checked.
             for lane in 0..$lanes {
@@ -53,4 +55,10 @@ macro_rules! check_accuracy {
             }
         }
     }};
+    (@input $kind:ident; $bits:expr) => {
+        $kind::from_bits($bits.try_into().unwrap())
+    };
+    (@input $kind:ident; $bits:expr, $arg_type:ty) => {
+        $bits as $arg_type
+    };
 }

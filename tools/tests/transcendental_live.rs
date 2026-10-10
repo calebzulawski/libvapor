@@ -43,7 +43,25 @@ fn input_strategy(width: Width, op: &str) -> BoxedStrategy<[u64; 3]> {
     };
     let ordinary = (low..high).prop_map(move |x| width.bits(x));
     let value = prop_oneof![all, ordinary];
-    if matches!(op, "atan2" | "hypot" | "pow" | "fmod" | "remainder") {
+    if matches!(op, "pown" | "rootn" | "compoundn") {
+        let exponent = prop_oneof![
+            any::<i64>(),
+            -34_i64..=34,
+            proptest::sample::select(vec![
+                i64::MIN,
+                i64::MAX,
+                (1_i64 << 53) - 1,
+                (1_i64 << 53) + 1
+            ]),
+        ];
+        return (value, exponent)
+            .prop_map(|(x, n)| [x, n as u64, 0])
+            .boxed();
+    }
+    if matches!(
+        op,
+        "atan2" | "hypot" | "pow" | "powr" | "fmod" | "remainder"
+    ) {
         (value.clone(), value).prop_map(|(y, x)| [y, x, 0]).boxed()
     } else {
         value.prop_map(|x| [x, 0, 0]).boxed()
@@ -93,11 +111,16 @@ transcendental_tests! {
     fmod(x, y) => |v| [v];
     remainder(x, y) => |v| [v];
     cbrt(x) => |v| [v];
+    rsqrt(x) => |v| [v];
     hypot(x, y) => |v| [v];
     exp(x) => |v| [v];
     exp2(x) => |v| [v];
     expm1(x) => |v| [v];
     pow(x, y) => |v| [v];
+    powr(x, y) => |v| [v];
+    pown(x, n: i64) => |v| [v];
+    rootn(x, n: i64) => |v| [v];
+    compoundn(x, n: i64) => |v| [v];
     log(x) => |v| [v];
     log2(x) => |v| [v];
     log10(x) => |v| [v];

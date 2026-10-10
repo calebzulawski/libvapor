@@ -27,7 +27,7 @@ impl Width {
     }
 }
 
-// Raw bits preserve NaNs, infinities and signed zeros in JSON.
+// Raw bits preserve NaNs, infinities, signed zeros, and i64 arguments in JSON.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Case {
     pub input: [u64; 3],
